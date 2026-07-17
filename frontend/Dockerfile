@@ -8,7 +8,7 @@ RUN npm ci
 # --- Build stage ---
 FROM dev AS build
 COPY . .
-RUN npm run build
+RUN npx vite build
 
 # --- Production stage ---
 FROM nginx:1.27-alpine AS prod
