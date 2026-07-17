@@ -45,9 +45,9 @@ jobs:
       - run: python manage.py check --deploy --fail-level WARNING
         env:
           DEBUG: "False"
-          SECRET_KEY: ci-test-key
+          SECRET_KEY: ci-placeholder-key-that-is-long-enough-for-django-checks-only
           ALLOWED_HOSTS: localhost
-          SECURE_SSL_REDIRECT: "False"
+          SECURE_SSL_REDIRECT: "True"
       - run: python manage.py collectstatic --noinput
         env:
-          SECRET_KEY: ci-test-key
+          SECRET_KEY: ci-placeholder-key-that-is-long-enough-for-django-checks-only
