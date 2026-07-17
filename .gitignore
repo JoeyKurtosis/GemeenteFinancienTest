@@ -9,6 +9,7 @@ build/
 # Django
 db.sqlite3
 media/
+staticfiles/
 
 # Node
 node_modules/

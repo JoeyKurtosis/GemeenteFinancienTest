@@ -24,7 +24,17 @@ MODELS = (Iv3Summary, Iv3Taakveld, Gemeente, Inwoners)
 class Command(BaseCommand):
     help = "Load the iv3 dataset from the shipped fixture. Run this on deploy, after migrate."
 
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--skip-if-loaded",
+            action="store_true",
+            help="Skip loading if iv3 data is already present in the database.",
+        )
+
     def handle(self, *args, **options):
+        if options["skip_if_loaded"] and Iv3Summary.objects.exists():
+            self.stdout.write("iv3 data already present, skipping load")
+            return
         # The delete is what makes this idempotent, and it is not optional. loaddata matches
         # existing rows by primary key, but these tables are rebuilt by delete-then-insert in
         # sync_iv3_summary, so a regenerated fixture carries a fresh set of autoincrement pks.
