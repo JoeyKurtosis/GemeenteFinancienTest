@@ -1,0 +1,10 @@
+export { LastenAlleTaakveldenRouteView } from "./components/lasten-alle-taakvelden-route-view";
+export { LastenBestuurEnOndersteuningRouteView } from "./components/lasten-bestuur-en-ondersteuning-route-view";
+export { LastenVeiligheidRouteView } from "./components/lasten-veiligheid-route-view";
+export { LastenVerkeerRouteView } from "./components/lasten-verkeer-route-view";
+export { LastenEconomieRouteView } from "./components/lasten-economie-route-view";
+export { LastenOnderwijsRouteView } from "./components/lasten-onderwijs-route-view";
+export { LastenSportCultuurEnRecreatieRouteView } from "./components/lasten-sport-cultuur-en-recreatie-route-view";
+export { LastenSociaalDomeinRouteView } from "./components/lasten-sociaal-domein-route-view";
+export { LastenVolksgezondheidEnMilieuRouteView } from "./components/lasten-volksgezondheid-en-milieu-route-view";
+export { LastenVolkshuisvestingRouteView } from "./components/lasten-volkshuisvesting-route-view";

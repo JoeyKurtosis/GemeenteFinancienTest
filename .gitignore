@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+dist/
+build/
+
+# Django
+db.sqlite3
+media/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Auto-generated
+routeTree.gen.ts
+
+# Environment
+venv/
+.venv/
+env/
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo

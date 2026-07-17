@@ -1,0 +1,11 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { BegrotingVsJaarrekeningRouteView } from "@/features/begroting";
+
+export const Route = createFileRoute("/_layout/begroting/vs-jaarrekening-per-inwoner")({
+    component: BegrotingVsJaarrekeningRouteView,
+    context: () => ({
+        title: "Begroting versus Jaarrekening",
+        description: "Euro per inwoner",
+        showBreadCrumbs: true,
+    }),
+});

@@ -1,0 +1,11 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { BegrotingRouteView } from "@/features/begroting";
+
+export const Route = createFileRoute("/_layout/begroting")({
+    component: BegrotingRouteView,
+    context: () => ({
+        title: "Verantwoording",
+        description: "Wat is wat?",
+        showBreadCrumbs: true,
+    }),
+});
