@@ -71,6 +71,12 @@ interface ChartCardProps {
     expandable?: boolean;
     /** How to render the figures — euros unless the chart is a percentage. */
     valueFormat?: ValueFormat;
+    /**
+     * Draw each row as shares of its own total rather than as the amounts themselves, so
+     * every bar fills the width and ends at 100% (`horizontal-bar` only). Pass
+     * `valueFormat="percent"` with it — the segments then carry a share, not a bedrag.
+     */
+    normalize?: boolean;
     /** Show a skeleton placeholder instead of the chart while data loads. */
     isLoading?: boolean;
     /**
@@ -93,13 +99,14 @@ export function ChartCard({
     showLegend = true,
     expandable = false,
     valueFormat = "euro",
+    normalize = false,
     isLoading = false,
     maxHeight,
     className,
 }: ChartCardProps) {
     const [isExpanded, setIsExpanded] = useState(false);
 
-    const chartContentProps = { data, series, chartType, xAxisKey, xAxisLabel, yAxisLabel, showLegend, valueFormat };
+    const chartContentProps = { data, series, chartType, xAxisKey, xAxisLabel, yAxisLabel, showLegend, valueFormat, normalize };
 
     return (
         <>
@@ -157,6 +164,8 @@ interface ChartContentProps {
     yAxisLabel?: string;
     showLegend?: boolean;
     valueFormat?: ValueFormat;
+    /** See ChartCardProps.normalize. */
+    normalize?: boolean;
     height?: number;
     maxHeight?: number;
 }
@@ -170,6 +179,7 @@ export function ChartContent({
     yAxisLabel,
     showLegend = true,
     valueFormat = "euro",
+    normalize = false,
     height = 300,
     maxHeight,
 }: ChartContentProps) {
@@ -229,7 +239,21 @@ export function ChartContent({
         const scrolls = maxHeight !== undefined && barHeight > maxHeight;
 
         const totalPerRow = data.map((entry) => series.reduce((sum, s) => sum + (Number(entry[s.key]) || 0), 0));
-        const maxTotal = Math.max(...totalPerRow);
+
+        // Normalised rows are drawn from figures of their own rather than from `data`, so
+        // every segment is its share of the row it sits in and the bar ends at 100. A row
+        // that totals nothing stays at zero — there is no share of nothing to take.
+        const rows = normalize
+            ? data.map((entry, index) => ({
+                  ...entry,
+                  ...Object.fromEntries(
+                      series.map((s) => [s.key, totalPerRow[index] ? ((Number(entry[s.key]) || 0) / totalPerRow[index]) * 100 : 0]),
+                  ),
+              }))
+            : data;
+
+        // What a segment is measured against for the "too thin to label" test below.
+        const maxTotal = normalize ? 100 : Math.max(...totalPerRow);
 
         return (
             <div className="flex flex-col gap-4">
@@ -245,10 +269,19 @@ export function ChartContent({
                 )}
                 <div className={cx(scrolls && "overflow-y-auto")} style={scrolls ? { height: maxHeight } : undefined}>
                     <ResponsiveContainer width="100%" height={barHeight}>
-                        <BarChart data={data} layout="vertical" barCategoryGap="20%" margin={{ left: 10, right: 60 }}>
+                        <BarChart data={rows} layout="vertical" barCategoryGap="20%" margin={{ left: 10, right: normalize ? 16 : 60 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-tertiary)" horizontal={false} />
                             <YAxis dataKey={xAxisKey} type="category" {...sharedAxisProps} width={120} />
-                            <XAxis type="number" {...sharedAxisProps} />
+                            {/* Pinned to 0–100 when normalised, with the ticks named rather than
+                                left to recharts: shares are floating-point divisions and a row
+                                lands on 100.00000000000003, which it will happily print. */}
+                            <XAxis
+                                type="number"
+                                {...sharedAxisProps}
+                                domain={normalize ? [0, 100] : undefined}
+                                ticks={normalize ? [0, 50, 100] : undefined}
+                                tickFormatter={normalize ? (value: unknown) => `${value}%` : undefined}
+                            />
                             {tooltip}
                             {series.map((s, i) => (
                                 <Bar
@@ -288,7 +321,9 @@ export function ChartContent({
                                             );
                                         }}
                                     />
-                                    {i === series.length - 1 && (
+                                    {/* The total at the end of the bar, which a normalised
+                                        one has no use for: it is 100% on every row. */}
+                                    {i === series.length - 1 && !normalize && (
                                         <LabelList
                                             position="right"
                                             content={({ x, y, width, height: h, index }) => {

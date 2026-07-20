@@ -19,15 +19,17 @@ const BEGROTING_SUFFIX = "000";
 /**
  * The view the dashboard opens on, and the one Reset returns to. GM1680 is Aa en Hunze.
  *
- * Verslagsoort is deliberately absent: its codes carry the year ("2024X000"), so it cannot
- * be named here. The pruning pass below resolves an unset verslagsoort to that year's
- * Begroting, which is the intended default.
+ * Jaar and verslagsoort are both deliberately absent, for the same reason: neither can be
+ * named ahead of the data. A verslagsoort code carries its year ("2024X000"), and the newest
+ * year moves whenever CBS publishes — a literal here is a value that silently goes stale, and
+ * did: the dashboard opened on 2024 for a year after 2025 and 2026 had landed in the fixture.
+ * The pruning pass below resolves an unset jaar to the newest the backend reports, and an
+ * unset verslagsoort to that year's Begroting.
  */
 const DEFAULT_SEARCH: FiltersSearch = {
     gemeente: "GM1680",
     referentie: ALLE_SELECTIE,
     inwoner: ALLE_SELECTIE,
-    jaar: 2024,
     reserve: true,
 };
 
@@ -163,7 +165,6 @@ export const FiltersProvider = ({ children }: { children: ReactNode }) => {
         if (gemeente === undefined) patch.gemeente = DEFAULT_SEARCH.gemeente;
         if (referentie === undefined) patch.referentie = DEFAULT_SEARCH.referentie;
         if (inwoner === undefined) patch.inwoner = DEFAULT_SEARCH.inwoner;
-        if (jaar === undefined) patch.jaar = DEFAULT_SEARCH.jaar;
         if (reserve === undefined) patch.reserve = DEFAULT_SEARCH.reserve;
 
         if (Object.keys(patch).length > 0) {
@@ -220,6 +221,13 @@ export const FiltersProvider = ({ children }: { children: ReactNode }) => {
         // are an empty list, not a verdict that every selection is invalid — without the guard a
         // /filters/ hiccup silently strips the gemeente out of the user's URL. The verslagsoort
         // branch has always guarded this way; the other three now agree with it.
+        // The newest year the data carries, which only /filters/ can name — see DEFAULT_SEARCH.
+        // `options.jaar` is the backend's own resolution of what was asked for, so a request
+        // that named no year comes back carrying the newest one rather than null.
+        if (jaar === undefined && options.jaar !== null) {
+            patch.jaar = options.jaar;
+        }
+
         if (options.gemeenten.length > 0 && gemeente && !options.gemeenten.some((option) => option.id === gemeente)) {
             patch.gemeente = undefined;
         }
@@ -251,7 +259,7 @@ export const FiltersProvider = ({ children }: { children: ReactNode }) => {
         }
 
         return patch;
-    }, [options, gemeente, verslagsoort, inwonerCodes, referentieCodes, isAlleReferentie, isAlleInwoner]);
+    }, [options, gemeente, jaar, verslagsoort, inwonerCodes, referentieCodes, isAlleReferentie, isAlleInwoner]);
 
     useEffect(() => {
         if (isLoading) return;
@@ -266,9 +274,9 @@ export const FiltersProvider = ({ children }: { children: ReactNode }) => {
      *
      * Without it a cold load fires the same heavy request up to four times and throws three away:
      * against an empty URL, again once the defaults land, again once /filters/ names the
-     * gemeenten, and again once the pruning pass finally pins the verslagsoort — which
-     * DEFAULT_SEARCH omits on purpose, so it is always the last to arrive and always the first
-     * correct request. Each is a full year-loop over Iv3Summary.
+     * gemeenten, and again once the pruning pass finally pins the jaar and the verslagsoort —
+     * which DEFAULT_SEARCH omits on purpose, so they are always the last to arrive and the
+     * first correct request. Each is a full year-loop over Iv3Summary.
      *
      * Deliberately not gated on `error`: options that never load never converge, and a chart
      * waiting on them would spin for ever. On a failure the pruning pass has nothing to prune

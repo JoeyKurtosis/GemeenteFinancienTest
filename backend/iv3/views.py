@@ -135,11 +135,23 @@ class GemeentelijkeStandView(ChartView):
     leeg = {"cohorten": [], "lijnen": {}, "verdeling": {}, "spuks": []}
 
     def chart(self, params, jaar, verslagsoort):
-        # No gemeente/referentie: this page's charts compare inwonergroepen and nothing else.
+        # The charts compare inwonergroepen, so `referentie` is not a cohort here but the
+        # report's Gemeente slicer: which municipalities count towards their class's average.
+        #
+        # The `alle` sentinel is left as "no filter" rather than resolved through
+        # _referentie, deliberately unlike every other page. There it stands for a
+        # referentiegroep whose membership has to hold still across the x-axis, so it becomes
+        # the selected year's codes. Here it stands for the country, and pinning it to one
+        # year's codes would drop every gemeente that has since merged out of existence from
+        # the earlier years of these lines.
+        referentie = self._codes(params, "referentie")
+        gemeenten = None if params.get("referentie") == REFERENTIE_ALLE else referentie or None
+
         return queries.gemeentelijke_stand(
             jaar=jaar,
             verslagsoort=verslagsoort,
             inwoner=self._codes(params, "inwoner"),
+            gemeenten=gemeenten,
             reserve=params.get("reserve") == "true",
         )
 

@@ -1,4 +1,4 @@
-import { type ChartSeries, type ChartType, formatValue, type ValueFormat } from "@/components/charts/chart-card";
+import { type ChartSeries, type ChartType, type ValueFormat, formatValue } from "@/components/charts/chart-card";
 import type { HighlightCardData } from "@/components/charts/highlight-card";
 import type { Cohort, LijnPunt, Managementoverzicht } from "../api";
 
@@ -52,17 +52,13 @@ function highlights(rows: LijnPunt[], cohorten: Cohort[], valueFormat: ValueForm
         const eerder = vorige?.[cohort.key];
         // Against the absolute previous figure: a negative one would otherwise flip the sign
         // against the direction the line visibly moved.
-        const verschil =
-            typeof eerder === "number" && eerder !== 0 ? ((waarde - eerder) / Math.abs(eerder)) * 100 : null;
+        const verschil = typeof eerder === "number" && eerder !== 0 ? ((waarde - eerder) / Math.abs(eerder)) * 100 : null;
 
         return [
             {
                 label: cohort.label,
                 value: formatValue(waarde, valueFormat),
-                change:
-                    verschil === null
-                        ? undefined
-                        : `${Math.abs(verschil).toLocaleString("nl-NL", { maximumFractionDigits: 1 })}%`,
+                change: verschil === null ? undefined : `${Math.abs(verschil).toLocaleString("nl-NL", { maximumFractionDigits: 1 })}%`,
                 trend: verschil === null ? undefined : verschil >= 0 ? "positive" : "negative",
             },
         ];
@@ -82,9 +78,7 @@ function highlights(rows: LijnPunt[], cohorten: Cohort[], valueFormat: ValueForm
  */
 function heleEuros(rows: LijnPunt[]): LijnPunt[] {
     return rows.map((punt) =>
-        Object.fromEntries(
-            Object.entries(punt).map(([key, waarde]) => [key, typeof waarde === "number" ? Math.round(waarde) : waarde]),
-        ),
+        Object.fromEntries(Object.entries(punt).map(([key, waarde]) => [key, typeof waarde === "number" ? Math.round(waarde) : waarde])),
     ) as LijnPunt[];
 }
 
@@ -146,20 +140,6 @@ export function managementoverzichtPagina(data: Managementoverzicht | null): Man
                 ],
                 lijnen.uitgaven ?? [],
                 cohorten,
-            ),
-            kaart(
-                "Hoe sterk is de financiële positie?",
-                "Om de financiële gezondheid uit te drukken, wordt hier gebruik gemaakt van de solvabiliteitsratio. Deze wordt berekend door het eigen vermogen te delen door het totale vermogen en uit te drukken als percentage. Bij een hoge solvabiliteit is er veel eigen vermogen tegenover vreemd vermogen (de schulden). De kans dat een gemeente haar schulden kan afbetalen is groot. Bij een lagere solvabiliteit, wordt deze kans steeds lager. De balans wordt alleen in de jaarrekening volledig verantwoord; deze grafiek is daarom altijd op de jaarrekening gebaseerd, ook wanneer de begroting is geselecteerd.",
-                [
-                    { label: "Databank Financiën Gemeenten, Findo", value: "" },
-                    { label: "Balanspost: P11 - Eigen vermogen, P - Totaal passiva", value: "" },
-                    // Said out loud rather than left to be inferred from a line that stops short
-                    // of the others — see Solvabiliteit in api.ts.
-                    { label: "Verslagsoort", value: data?.solvabiliteit?.label ?? "Jaarrekening" },
-                ],
-                data?.solvabiliteit?.data ?? [],
-                cohorten,
-                "percent",
             ),
             kaart(
                 "Hoe hoog is de lokale belastingdruk?",

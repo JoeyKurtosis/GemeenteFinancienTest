@@ -368,6 +368,7 @@ def gemeentelijke_stand(
     jaar: int,
     verslagsoort: str,
     inwoner: list[str] | None = None,
+    gemeenten: list[str] | None = None,
     reserve: bool = False,
 ) -> dict:
     """Every figure the Gemeentelijke Stand page draws, in one payload.
@@ -382,10 +383,13 @@ def gemeentelijke_stand(
     charts compare the size classes against each other. With none selected the charts fall
     back to a single line for the country as a whole.
 
-    The page compares size classes and nothing else, so it takes neither the selected
-    gemeente nor the referentiegroep: the report's charts are drawn from Inwonergroep alone.
-    Every figure is an equal-weight mean across the gemeenten in a class (_per_inwoner_mean,
-    the report's "Avg Bedrag Per Gemeente pi"), never a population-weighted pooled ratio.
+    The charts' series are the size classes and nothing else — the report draws this page
+    from Inwonergroep alone, so there is no line for a single gemeente or a referentiegroep.
+    `gemeenten` is therefore not a cohort but a narrowing of the population every class is
+    measured over, the report's Gemeente slicer: `None` means the country, a list means only
+    those municipalities count towards their class's average. Every figure is an equal-weight
+    mean across the gemeenten in a class (_per_inwoner_mean, the report's "Avg Bedrag Per
+    Gemeente pi"), never a population-weighted pooled ratio.
     """
     suffix = verslagsoort[-3:]
     # In definition order, not selection order — so the legend runs small to large however
@@ -402,11 +406,14 @@ def gemeentelijke_stand(
 
     per_jaar: dict[int, dict[str, list]] = {}
     for chart_jaar in jaren:
-        rows = list(
-            Iv3Summary.objects.filter(
-                jaar=chart_jaar, verslagsoort=f"{chart_jaar}X{suffix}"
-            ).only(*STAND_VELDEN)
+        selectie = Iv3Summary.objects.filter(
+            jaar=chart_jaar, verslagsoort=f"{chart_jaar}X{suffix}"
         )
+        # Narrowed in SQL rather than in Python: a small selection then also loads a few
+        # rows instead of the year's ~342, and a row here is ~2KB of JSON.
+        if gemeenten:
+            selectie = selectie.filter(gm_code__in=gemeenten)
+        rows = list(selectie.only(*STAND_VELDEN))
         # Kept aside before the toggle folds 0.10 in, so _saldo_pct can stay reserve-free.
         for row in rows:
             row.basis_lasten = row.lasten
@@ -535,8 +542,10 @@ def _index_chart(lijn: list[dict], keys: list[str], jaren: list[int], reeks: dic
 def _verdeling(snapshot, cohorten, veld: str, labels: dict[str, str], meting) -> dict:
     """A bedrag broken down into a stacked bar per reeks.
 
-    Euros rather than percentages: the chart already prints a euro figure in each segment
-    and a total at the end of the bar.
+    Euros rather than percentages, whichever way the chart ends up reading: the Begroting
+    bars print a euro figure per segment and a total at the end, and Gemeentelijke Stand's
+    two draw the same payload as shares of 100% — normalising a stack is the chart's job
+    (see ChartContent's `normalize`), and dividing here would only throw the amounts away.
 
     `meting` picks the measure and is never defaulted, because it is the whole difference
     between a Begroting page drawn per inhabitant and the same page drawn in absolute
