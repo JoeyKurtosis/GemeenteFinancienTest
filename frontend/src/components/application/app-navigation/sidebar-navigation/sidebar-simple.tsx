@@ -147,7 +147,7 @@ export const SidebarNavigationSimple = ({
                                 />
                                 Filters
                             </AriaButton>
-                            <AriaPopover placement="bottom left" offset={8} className={popoverAnimation}>
+                            <AriaPopover placement="right top" offset={28} crossOffset={-4} className={popoverAnimation}>
                                 <AriaDialog className="w-72 rounded-xl bg-primary p-4 shadow-lg ring-1 ring-secondary outline-hidden">
                                     {({ close }) => <SidebarFilters {...filterState} onApply={close} />}
                                 </AriaDialog>

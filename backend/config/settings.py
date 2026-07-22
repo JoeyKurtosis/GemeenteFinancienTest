@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     "users",
     "support",
     "iv3",
+    "chat",
 ]
 
 MIDDLEWARE = [
@@ -123,7 +124,36 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    # Used only by the chat endpoint, which attaches both throttles per-view. The burst rate
+    # stops a runaway client; the daily rate is the cost ceiling on a paid upstream API.
+    #
+    # Counters live in CACHES, which is LocMemCache and therefore per-process, so N gunicorn
+    # workers give roughly N times these rates. Set them against the budget accordingly.
+    "DEFAULT_THROTTLE_RATES": {
+        "chat_burst": "10/min",
+        "chat_daily": "200/day",
+    },
 }
+
+# Chat assistant
+#
+# Google's Gemini API, reached through its OpenAI-compatibility endpoint so the proxy in
+# chat/views.py and the frontend adapter both stay OpenAI-shaped. The key is read here and
+# used only server-side — it must never be exposed to the browser, which is the whole reason
+# /api/chat/ exists rather than the frontend calling Google directly.
+#
+# Unset is a supported state: the endpoint returns 503 with a Dutch message and the rest of the
+# dashboard is unaffected.
+#
+# gemini-2.5-flash has a free tier and predates the Gemini 3 "thought signatures" that break
+# stateless tool-calling loops like ours. Moving to a 3.x model is an env-var change, but
+# re-test tool calling when you do.
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest")
+# No trailing slash: chat/views.py appends "/chat/completions".
+GEMINI_BASE_URL = os.getenv(
+    "GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai"
+)
 
 # Email
 DEFAULT_FROM_EMAIL = "noreply@gemeentefinancien.nl"

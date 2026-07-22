@@ -30,7 +30,8 @@ import {
     RefreshCwIcon,
     SquareIcon,
 } from "lucide-react";
-import { ComposerAddAttachment, ComposerAttachments, UserMessageAttachments } from "@/components/assistant-ui/attachment";
+// ComposerAddAttachment is commented out below — re-add here when re-enabling the attachment button.
+import { ComposerAttachments, UserMessageAttachments } from "@/components/assistant-ui/attachment";
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import { Reasoning, ReasoningContent, ReasoningRoot, ReasoningText, ReasoningTrigger } from "@/components/assistant-ui/reasoning";
 import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
@@ -206,8 +207,8 @@ const Composer: FC = () => {
 
 const ComposerAction: FC = () => {
     return (
-        <div className="aui-composer-action-wrapper relative flex items-center justify-between">
-            <ComposerAddAttachment />
+        <div className="aui-composer-action-wrapper relative flex items-center justify-end">
+            {/* <ComposerAddAttachment /> */}
             <div className="flex items-center gap-1.5">
                 <AuiIf condition={(s) => s.thread.capabilities.dictation}>
                     <AuiIf condition={(s) => s.composer.dictation == null}>

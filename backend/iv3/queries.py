@@ -37,6 +37,28 @@ def available_jaar_verslagsoort() -> dict[int, list[str]]:
     return per_jaar
 
 
+def resolve_verslagsoort(requested: str | None, jaar: int, per_jaar: dict) -> str | None:
+    """Pin the report to one the selected year actually carries.
+
+    The client sends a code for whichever year was selected before, and the newest
+    years only have a Begroting — so an unusable code is normal, not a bug. Prefer the
+    Jaarrekening, which is what actually happened, and fall back to the Begroting.
+
+    Lives here rather than on the view because the assistant needs the same rule: a
+    question about a year with no Jaarrekening has to land on the Begroting, or the bot
+    reports "no data" for a year the dashboard draws fine.
+    """
+    beschikbaar = per_jaar.get(jaar, [])
+    if requested in beschikbaar:
+        return requested
+
+    for voorkeur in (d.VERSLAGSOORT_JAARREKENING, d.VERSLAGSOORT_BEGROTING):
+        for code in sorted(beschikbaar):
+            if code.endswith(voorkeur):
+                return code
+    return None
+
+
 def verslagsoort_options(codes: list[str]) -> list[dict]:
     """The codes the dashboard knows how to label, in Begroting-then-Jaarrekening order."""
     options = []

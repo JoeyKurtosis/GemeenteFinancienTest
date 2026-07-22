@@ -16,7 +16,10 @@ export default defineConfig({
     },
     server: {
         proxy: {
-            "/api": backendUrl,
+            // Object form rather than the string shorthand so the SSE stream from
+            // /api/chat/ has somewhere to declare its needs. Vite's proxy passes
+            // responses through unbuffered, so this is mostly future-proofing.
+            "/api": { target: backendUrl, changeOrigin: true },
             "/media": backendUrl,
         },
     },

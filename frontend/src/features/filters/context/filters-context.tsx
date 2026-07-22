@@ -1,8 +1,8 @@
-import { type ReactNode, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import type { Key, Selection } from "react-aria-components";
 import { type FilterOptions, fetchFilterOptions } from "../api";
-import { ALLE_SELECTIE, type FiltersSearch, parseCodes, serializeCodes, serializeSelectie } from "../search";
+import { ALLE_SELECTIE, type FiltersSearch, GEEN_SELECTIE, isSentinelSelectie, parseCodes, serializeCodes, serializeSelectie } from "../search";
 
 const EMPTY_OPTIONS: FilterOptions = {
     jaren: [],
@@ -23,7 +23,7 @@ const BEGROTING_SUFFIX = "000";
  * named ahead of the data. A verslagsoort code carries its year ("2024X000"), and the newest
  * year moves whenever CBS publishes — a literal here is a value that silently goes stale, and
  * did: the dashboard opened on 2024 for a year after 2025 and 2026 had landed in the fixture.
- * The pruning pass below resolves an unset jaar to the newest the backend reports, and an
+ * The corrections pass below resolves an unset jaar to the newest the backend reports, and an
  * unset verslagsoort to that year's Begroting.
  */
 const DEFAULT_SEARCH: FiltersSearch = {
@@ -53,8 +53,8 @@ interface FiltersContextValue {
     error: string | null;
 
     /**
-     * Whether `applied` is settled enough to query with: the options are loaded and the pruning
-     * pass has nothing left to correct. Every chart hook gates its fetch on this — see the
+     * Whether `applied` is settled enough to query with: the options are loaded and the
+     * corrections pass has nothing left to correct. Every chart hook gates its fetch on this — see the
      * comment on isReady in FiltersProvider for what it costs not to.
      */
     isReady: boolean;
@@ -109,7 +109,7 @@ const isSameSearch = (a: FiltersSearch, b: FiltersSearch) =>
     a.jaar === b.jaar &&
     resolveReserve(a.reserve) === resolveReserve(b.reserve);
 
-const toSelection = (value?: string): Selection => (value === ALLE_SELECTIE ? "all" : new Set(parseCodes(value)));
+const toSelection = (value?: string): Selection => (value === ALLE_SELECTIE ? "all" : value === GEEN_SELECTIE ? new Set<Key>() : new Set(parseCodes(value)));
 
 export const FiltersProvider = ({ children }: { children: ReactNode }) => {
     const search = useSearch({ strict: false }) as FiltersSearch;
@@ -134,13 +134,11 @@ export const FiltersProvider = ({ children }: { children: ReactNode }) => {
     );
 
     const { gemeente, referentie, inwoner, verslagsoort, jaar, reserve } = search;
-    const isAlleReferentie = referentie === ALLE_SELECTIE;
-    const referentieCodes = useMemo(
-        () => (isAlleReferentie ? [] : parseCodes(referentie)),
-        [isAlleReferentie, referentie],
-    );
-    const isAlleInwoner = inwoner === ALLE_SELECTIE;
-    const inwonerCodes = useMemo(() => (isAlleInwoner ? [] : parseCodes(inwoner)), [isAlleInwoner, inwoner]);
+    // Neither sentinel names codes, so neither has anything to prune — see the pruning pass.
+    const isSentinelReferentie = isSentinelSelectie(referentie);
+    const referentieCodes = useMemo(() => (isSentinelReferentie ? [] : parseCodes(referentie)), [isSentinelReferentie, referentie]);
+    const isSentinelInwoner = isSentinelSelectie(inwoner);
+    const inwonerCodes = useMemo(() => (isSentinelInwoner ? [] : parseCodes(inwoner)), [isSentinelInwoner, inwoner]);
 
     const applied = useMemo<AppliedFilters>(
         () => ({
@@ -154,29 +152,14 @@ export const FiltersProvider = ({ children }: { children: ReactNode }) => {
         [gemeente, referentie, inwoner, verslagsoort, jaar, reserve],
     );
 
-    // The dashboard opens on a complete view rather than empty selects. Applied once: a
-    // filter the user deliberately clears must stay cleared, not snap back to its default.
-    const defaultsApplied = useRef(false);
-    useEffect(() => {
-        if (defaultsApplied.current) return;
-        defaultsApplied.current = true;
-
-        const patch: Partial<FiltersSearch> = {};
-        if (gemeente === undefined) patch.gemeente = DEFAULT_SEARCH.gemeente;
-        if (referentie === undefined) patch.referentie = DEFAULT_SEARCH.referentie;
-        if (inwoner === undefined) patch.inwoner = DEFAULT_SEARCH.inwoner;
-        if (reserve === undefined) patch.reserve = DEFAULT_SEARCH.reserve;
-
-        if (Object.keys(patch).length > 0) {
-            patchSearch(patch);
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- first render only
-    }, []);
-
     // The applied filters are the source of truth: pull the draft back in line whenever
-    // they change under it (Toepassen, Reset, the pruning pass below, the back button).
+    // they change under it (Toepassen, Reset, the corrections pass below, the back button).
+    //
+    // Merged over the defaults, so a filter the URL has not been given yet shows the value the
+    // corrections pass is about to write rather than an empty select for a render or two.
     useEffect(() => {
-        setDraft((current) => (isSameSearch(current, search) ? current : { ...search }));
+        const next = { ...DEFAULT_SEARCH, ...search };
+        setDraft((current) => (isSameSearch(current, next) ? current : next));
     }, [search]);
 
     // Refetches whenever the applied year changes: the gemeente list shrinks over time
@@ -206,16 +189,32 @@ export const FiltersProvider = ({ children }: { children: ReactNode }) => {
         };
     }, [jaar]);
 
-    // A selection made for one year can be meaningless in another — a gemeente may have
-    // been merged away, and Jaarrekening does not exist for the current year. Correct the
-    // URL rather than letting the pages query a combination that has no data.
+    // Everything that has to be true of the URL before a page may query with it: the defaults
+    // that make the dashboard open on a complete view, and the pruning of selections that are
+    // meaningless for the applied year — a gemeente may have been merged away, and Jaarrekening
+    // does not exist for the current year.
     //
     // Derived rather than computed inside the effect that applies it, because two questions are
     // being asked of the same rules and only one of them is "change the URL". The pages need to
     // know whether the URL is *already* right — see isReady — and an effect that has not run yet
     // cannot tell them.
-    const pruning = useMemo<Partial<FiltersSearch>>(() => {
+    //
+    // The defaults live here, recomputed every render, rather than in a first-render effect of
+    // their own. They used to have one, and it raced this pass: two navigate() calls, each built
+    // from the router's last *committed* location, so whenever /filters/ answered before the
+    // router committed the defaults, this pass overwrote them — and the effect, being one-shot,
+    // never put them back. The dashboard then sat there with empty selects, sometimes. Derived,
+    // a lost patch is simply recomputed and reissued on the next render.
+    const corrections = useMemo<Partial<FiltersSearch>>(() => {
         const patch: Partial<FiltersSearch> = {};
+
+        // Absent means "not chosen yet" and takes the default; the "geen" sentinel means the
+        // user emptied the select and must stay empty. That distinction is the whole reason
+        // an empty multi-select is serialised rather than dropped — see GEEN_SELECTIE.
+        if (gemeente === undefined) patch.gemeente = DEFAULT_SEARCH.gemeente;
+        if (referentie === undefined) patch.referentie = DEFAULT_SEARCH.referentie;
+        if (inwoner === undefined) patch.inwoner = DEFAULT_SEARCH.inwoner;
+        if (reserve === undefined) patch.reserve = DEFAULT_SEARCH.reserve;
 
         // Every branch guards on having options to prune *against*. Options that failed to load
         // are an empty list, not a verdict that every selection is invalid — without the guard a
@@ -236,54 +235,54 @@ export const FiltersProvider = ({ children }: { children: ReactNode }) => {
         // falls back to Begroting, which every year has.
         const heeftVerslagsoort = verslagsoort && options.verslagsoorten.some((option) => option.id === verslagsoort);
         if (!heeftVerslagsoort && options.verslagsoorten.length > 0) {
-            const zelfdeSoort = verslagsoort
-                ? options.verslagsoorten.find((option) => option.id.endsWith(verslagsoort.slice(-3)))
-                : undefined;
+            const zelfdeSoort = verslagsoort ? options.verslagsoorten.find((option) => option.id.endsWith(verslagsoort.slice(-3))) : undefined;
             const begroting = options.verslagsoorten.find((option) => option.id.endsWith(BEGROTING_SUFFIX));
             patch.verslagsoort = (zelfdeSoort ?? begroting ?? options.verslagsoorten[0]).id;
         }
 
-        // "alle" follows the year rather than naming codes, so there is nothing to prune.
-        if (!isAlleReferentie && options.gemeenten.length > 0) {
+        // Neither sentinel names codes — "alle" follows the year and "geen" is empty on
+        // purpose — so there is nothing to prune. Pruning every code away lands on "geen"
+        // rather than on nothing, which the defaults above would read as unset and refill.
+        if (!isSentinelReferentie && options.gemeenten.length > 0) {
             const validCodes = referentieCodes.filter((code) => options.gemeenten.some((option) => option.id === code));
             if (validCodes.length !== referentieCodes.length) {
-                patch.referentie = serializeCodes(validCodes);
+                patch.referentie = serializeCodes(validCodes) ?? GEEN_SELECTIE;
             }
         }
 
-        if (!isAlleInwoner && options.inwonergroepen.length > 0) {
+        if (!isSentinelInwoner && options.inwonergroepen.length > 0) {
             const validGroepen = inwonerCodes.filter((id) => options.inwonergroepen.some((option) => option.id === id));
             if (validGroepen.length !== inwonerCodes.length) {
-                patch.inwoner = serializeCodes(validGroepen);
+                patch.inwoner = serializeCodes(validGroepen) ?? GEEN_SELECTIE;
             }
         }
 
         return patch;
-    }, [options, gemeente, jaar, verslagsoort, inwonerCodes, referentieCodes, isAlleReferentie, isAlleInwoner]);
+    }, [options, gemeente, jaar, verslagsoort, reserve, inwonerCodes, referentieCodes, isSentinelReferentie, isSentinelInwoner]);
 
     useEffect(() => {
         if (isLoading) return;
-        if (Object.keys(pruning).length > 0) {
-            patchSearch(pruning);
+        if (Object.keys(corrections).length > 0) {
+            patchSearch(corrections);
         }
-    }, [isLoading, pruning, patchSearch]);
+    }, [isLoading, corrections, patchSearch]);
 
     /**
-     * True once the filters describe a view worth querying: the options are in, and the pruning
-     * pass has nothing left to correct. The chart hooks gate their fetches on this.
+     * True once the filters describe a view worth querying: the options are in, and the
+     * corrections pass has nothing left to correct. The chart hooks gate their fetches on this.
      *
-     * Without it a cold load fires the same heavy request up to four times and throws three away:
-     * against an empty URL, again once the defaults land, again once /filters/ names the
-     * gemeenten, and again once the pruning pass finally pins the jaar and the verslagsoort —
-     * which DEFAULT_SEARCH omits on purpose, so they are always the last to arrive and the
+     * Without it a cold load fires the same heavy request several times over and throws all but
+     * the last away: against an empty URL, again once /filters/ names the gemeenten, and again
+     * once the corrections pass pins the defaults, the jaar and the verslagsoort — the last two
+     * of which DEFAULT_SEARCH omits on purpose, so they are always the last to arrive and the
      * first correct request. Each is a full year-loop over Iv3Summary.
      *
      * Deliberately not gated on `error`: options that never load never converge, and a chart
-     * waiting on them would spin for ever. On a failure the pruning pass has nothing to prune
+     * waiting on them would spin for ever. On a failure the corrections pass has nothing to prune
      * against (the guards above), so this goes true and the pages query with what the URL holds —
      * ChartView's own fallbacks pin the rest. The sidebar still shows the error.
      */
-    const isReady = !isLoading && Object.keys(pruning).length === 0;
+    const isReady = !isLoading && Object.keys(corrections).length === 0;
 
     const apply = useCallback(() => {
         patchSearch(draft);
