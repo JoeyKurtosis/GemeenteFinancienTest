@@ -1,4 +1,4 @@
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -248,3 +248,129 @@ class ManagementoverzichtView(ChartView):
             referentie=self._referentie(params, jaar),
             reserve=params.get("reserve") == "true",
         )
+
+
+class DashboardSettingsView(APIView):
+    """GET/PUT the configurable dashboard parameters. Admin only."""
+
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        from iv3.settings_bridge import get_settings
+
+        s = get_settings()
+        return Response({
+            "cpi_per_jaar": s.CPI_PER_JAAR,
+            "cao_lonen_per_jaar": s.CAO_LONEN_PER_JAAR,
+            "inwonergroepen": s.INWONERGROEPEN,
+            "aggregation_method": s.AGGREGATION_METHOD,
+            "taakveld_label_overrides": s.TAAKVELD_LABEL_OVERRIDES,
+        })
+
+    def put(self, request):
+        from iv3.models import DashboardSettings
+        from iv3.serializers import DashboardSettingsSerializer
+
+        instance = DashboardSettings.load()
+        serializer = DashboardSettingsSerializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+
+class DashboardSettingsDefaultsView(APIView):
+    """Returns the hardcoded defaults from definitions.py so the frontend can offer a reset."""
+
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        return Response({
+            "cpi_per_jaar": d.CPI_PER_JAAR,
+            "cao_lonen_per_jaar": d.CAO_LONEN_PER_JAAR,
+            "inwonergroepen": d.INWONERGROEPEN,
+            "aggregation_method": "equal_weight",
+            "taakveld_label_overrides": d.TAAKVELD_LABEL_OVERRIDES,
+        })
+
+
+class MeasureListView(APIView):
+    """List all measures or create a new one. Admin only."""
+
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        from iv3.expression_eval import ALLOWED_FIELDS, FIELD_DESCRIPTIONS
+        from iv3.models import Measure
+        from iv3.serializers import MeasureSerializer
+
+        measures = Measure.objects.all()
+        fields = [
+            {"name": name, "description": FIELD_DESCRIPTIONS.get(name, "")}
+            for name in sorted(ALLOWED_FIELDS)
+        ]
+        return Response({
+            "measures": MeasureSerializer(measures, many=True).data,
+            "fields": fields,
+        })
+
+    def post(self, request):
+        from iv3.serializers import MeasureSerializer
+
+        serializer = MeasureSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=201)
+
+
+class MeasureDetailView(APIView):
+    """Get, update, or delete a single measure. Admin only."""
+
+    permission_classes = [IsAdminUser]
+
+    def get(self, request, key):
+        from iv3.models import Measure
+        from iv3.serializers import MeasureSerializer
+
+        try:
+            measure = Measure.objects.get(key=key)
+        except Measure.DoesNotExist:
+            return Response({"detail": "Measure niet gevonden."}, status=404)
+        return Response(MeasureSerializer(measure).data)
+
+    def put(self, request, key):
+        from iv3.models import Measure
+        from iv3.serializers import MeasureSerializer
+
+        try:
+            measure = Measure.objects.get(key=key)
+        except Measure.DoesNotExist:
+            return Response({"detail": "Measure niet gevonden."}, status=404)
+
+        serializer = MeasureSerializer(measure, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+    def delete(self, request, key):
+        from iv3.models import Measure
+
+        try:
+            measure = Measure.objects.get(key=key)
+        except Measure.DoesNotExist:
+            return Response({"detail": "Measure niet gevonden."}, status=404)
+        measure.delete()
+        return Response(status=204)
+
+
+class MeasureResetView(APIView):
+    """Reset all measures to their system defaults. Admin only."""
+
+    permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        from django.core.management import call_command
+        from iv3.models import Measure
+
+        Measure.objects.all().delete()
+        call_command("init_measures")
+        return Response({"detail": "Measures hersteld naar standaardwaarden."})

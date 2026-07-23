@@ -228,3 +228,62 @@ class Iv3Taakveld(models.Model):
 
     def __str__(self):
         return f"{self.jaar} {self.code} {self.titel}"
+
+
+class DashboardSettings(models.Model):
+    """Site-wide configurable parameters for the dashboard calculations.
+
+    Singleton: exactly one row (pk=1). Use DashboardSettings.load() to read it.
+    Empty/null fields fall back to the hardcoded defaults in definitions.py via
+    settings_bridge.get_settings().
+    """
+
+    cpi_per_jaar = models.JSONField(default=dict, blank=True)
+    cao_lonen_per_jaar = models.JSONField(default=dict, blank=True)
+    inwonergroepen = models.JSONField(default=list, blank=True)
+    aggregation_method = models.CharField(
+        max_length=32,
+        default="equal_weight",
+        choices=[
+            ("equal_weight", "Equal-weight mean"),
+            ("population_weighted", "Population-weighted mean"),
+        ],
+    )
+    taakveld_label_overrides = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        verbose_name = "Dashboard-instellingen"
+        verbose_name_plural = "Dashboard-instellingen"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def __str__(self):
+        return "Dashboard-instellingen"
+
+
+class Measure(models.Model):
+    """A named calculation formula, editable from the settings page.
+
+    Each measure defines how a metric is computed from Iv3Summary fields.
+    The expression is a simple math formula over field names (e.g.,
+    "salarissen + inhuur"). See expression_eval.py for the allowed syntax.
+    """
+
+    key = models.SlugField(max_length=64, unique=True)
+    name = models.CharField(max_length=128)
+    expression = models.TextField()
+    description = models.TextField(blank=True, default="")
+    page = models.CharField(max_length=255, blank=True, default="")
+
+    class Meta:
+        ordering = ["key"]
+
+    def __str__(self):
+        return f"{self.name} ({self.key})"

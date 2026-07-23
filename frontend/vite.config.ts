@@ -22,5 +22,8 @@ export default defineConfig({
             "/api": { target: backendUrl, changeOrigin: true },
             "/media": backendUrl,
         },
+        watch: {
+            usePolling: true,
+        },
     },
 });

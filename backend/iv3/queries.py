@@ -1,7 +1,19 @@
+import math
 from types import SimpleNamespace
 
 from iv3 import definitions as d
+
+
+def _round(value: float) -> int:
+    """Round half up, matching Power BI behavior.
+
+    Python's round() uses banker's rounding (half to even), which can differ by 1
+    from Power BI's standard rounding on boundary values like 1478.5.
+    """
+    return math.floor(value + 0.5)
 from iv3.models import Gemeente, Inwoners, Iv3Summary, Iv3Taakveld
+from iv3.measure_bridge import get_measure_fn
+from iv3.settings_bridge import get_settings
 
 # The CBS verslagsoort code carries the report type in its last three digits. X001-X004
 # are the quarterly reports, which the dashboard does not offer.
@@ -33,6 +45,8 @@ def available_jaar_verslagsoort() -> dict[int, list[str]]:
     per_jaar: dict[int, list[str]] = {}
     rows = Iv3Summary.objects.values_list("jaar", "verslagsoort").distinct().order_by("jaar", "verslagsoort")
     for jaar, verslagsoort in rows:
+        if jaar < 2018:
+            continue
         per_jaar.setdefault(jaar, []).append(verslagsoort)
     return per_jaar
 
@@ -133,7 +147,7 @@ def _inwonergroepen_voor(gm_code: str, inwoners: int | None) -> list[str]:
     client filters by group id, exactly as inwonergroep_options() intends.
     """
     row = SimpleNamespace(gm_code=gm_code, inwoners=inwoners)
-    return [groep["id"] for groep in d.INWONERGROEPEN if _in_groep(row, groep)]
+    return [groep["id"] for groep in get_settings().INWONERGROEPEN if _in_groep(row, groep)]
 
 
 def provincie_options(jaar: int) -> list[dict]:
@@ -162,7 +176,7 @@ def inwonergroep_options() -> list[dict]:
     The bounds themselves stay in the backend: the client only ever selects a group by id,
     and the charts label the lines with what comes back here.
     """
-    return [{"id": groep["id"], "label": groep["label"]} for groep in d.INWONERGROEPEN]
+    return [{"id": groep["id"], "label": groep["label"]} for groep in get_settings().INWONERGROEPEN]
 
 
 # ── Gemeentelijke stand ─────────────────────────────────────────────────────────────
@@ -209,10 +223,12 @@ COHORT_LANDELIJK = "landelijk"
 # Metric -> how to get it out of a bundle of summary rows. Kept as one table so the line
 # charts, the API response and the index charts cannot drift apart. `overschot` is not here:
 # it is a percentage rather than a euro figure, and is built with _saldo_pct.
-LIJN_METRICS = {
+#
+# Each metric first checks the database for a user-defined formula (via
+# get_measure_fn), and falls back to the hardcoded lambda if none exists.
+_LIJN_DEFAULTS = {
     "uitgaven": lambda r: r.lasten,
     "sociaal": lambda r: r.sociaal,
-    # "Totale" personeelskosten: payroll plus the staff hired in to do the same work.
     "personeel": lambda r: r.salarissen + r.inhuur,
     "inhuur": lambda r: r.inhuur,
     "verbonden": lambda r: r.verbonden,
@@ -220,6 +236,14 @@ LIJN_METRICS = {
     "heffingen": lambda r: r.heffingen,
     "spuks": lambda r: r.spuks,
 }
+
+
+def _get_lijn_metrics() -> dict:
+    """Build the LIJN_METRICS dict, preferring DB-defined measures."""
+    return {
+        key: get_measure_fn(key, fallback=default)
+        for key, default in _LIJN_DEFAULTS.items()
+    }
 
 # The two verdeling charts are per_hoofdcategorie and per_hoofdtaakveld — the pair the
 # reservemutaties fold deliberately leaves alone — so this page needs neither breakdown, and
@@ -243,7 +267,7 @@ def _per_inwoner(rows, measure) -> float | None:
     if not inwoners:
         return None
     bedrag = sum(measure(row) for row in rows)
-    return round(bedrag * d.BEDRAG_FACTOR / inwoners, 2)
+    return _round(bedrag * d.BEDRAG_FACTOR / inwoners)
 
 
 def _per_inwoner_mean(rows, measure) -> float | None:
@@ -255,13 +279,18 @@ def _per_inwoner_mean(rows, measure) -> float | None:
     average of its members' per-inwoner figures, so a large gemeente does not dominate the
     group. One row is one gemeente. A single-gemeente cohort collapses to that gemeente's
     own ratio, identical to the weighted figure.
+
+    When the dashboard settings aggregation_method is "population_weighted", this
+    delegates to _per_inwoner instead.
     """
+    if get_settings().AGGREGATION_METHOD == "population_weighted":
+        return _per_inwoner(rows, measure)
     ratios = [
         measure(row) * d.BEDRAG_FACTOR / row.inwoners for row in rows if row.inwoners
     ]
     if not ratios:
         return None
-    return round(sum(ratios) / len(ratios), 2)
+    return _round(sum(ratios) / len(ratios))
 
 
 def _bedrag_mean(rows, measure) -> float | None:
@@ -276,7 +305,7 @@ def _bedrag_mean(rows, measure) -> float | None:
     if not rows:
         return None
     bedrag = sum(measure(row) for row in rows)
-    return round(bedrag * d.BEDRAG_FACTOR / len(rows), 2)
+    return _round(bedrag * d.BEDRAG_FACTOR / len(rows))
 
 
 def _rebase(waarden: list[float | None]) -> list[float | None]:
@@ -332,7 +361,7 @@ def _saldo_pct(rows) -> float | None:
     ]
     if not ratios:
         return None
-    return round(sum(ratios) / len(ratios), 2)
+    return _round(sum(ratios) / len(ratios))
 
 
 def _apply_reservemutaties(rows, baten_verdeling: bool = False, lasten_verdeling: bool = False):
@@ -416,12 +445,12 @@ def gemeentelijke_stand(
     suffix = verslagsoort[-3:]
     # In definition order, not selection order — so the legend runs small to large however
     # the user ticked the boxes.
-    groepen = [groep for groep in d.INWONERGROEPEN if groep["id"] in (inwoner or [])]
+    groepen = [groep for groep in get_settings().INWONERGROEPEN if groep["id"] in (inwoner or [])]
 
     # A year is only comparable to the others through the same kind of report, so the
     # verslagsoort code is rebuilt per year from the suffix rather than reused verbatim.
     jaren = sorted(
-        Iv3Summary.objects.filter(jaar__lte=jaar, verslagsoort__endswith=suffix)
+        Iv3Summary.objects.filter(jaar__gte=2018, jaar__lte=jaar, verslagsoort__endswith=suffix)
         .values_list("jaar", flat=True)
         .distinct()
     )
@@ -470,7 +499,7 @@ def gemeentelijke_stand(
             }
             for chart_jaar in jaren
         ]
-        for metric, measure in LIJN_METRICS.items()
+        for metric, measure in _get_lijn_metrics().items()
     }
 
     lijnen["overschot"] = [
@@ -481,8 +510,9 @@ def gemeentelijke_stand(
         for chart_jaar in jaren
     ]
 
-    lijnen["indexUitgaven"] = _index_chart(lijnen["uitgaven"], keys, jaren, d.CPI_PER_JAAR)
-    lijnen["indexPersoneel"] = _index_chart(lijnen["personeel"], keys, jaren, d.CAO_LONEN_PER_JAAR)
+    settings = get_settings()
+    lijnen["indexUitgaven"] = _index_chart(lijnen["uitgaven"], keys, jaren, settings.CPI_PER_JAAR)
+    lijnen["indexPersoneel"] = _index_chart(lijnen["personeel"], keys, jaren, settings.CAO_LONEN_PER_JAAR)
 
     snapshot = per_jaar.get(jaar, {})
     return {
@@ -505,7 +535,7 @@ def gemeentelijke_stand(
             {
                 "name": cohort["label"],
                 "bedrag": _per_inwoner_mean(
-                    snapshot.get(cohort["key"], []), LIJN_METRICS["spuks"]
+                    snapshot.get(cohort["key"], []), _get_lijn_metrics()["spuks"]
                 ),
             }
             for cohort in cohorten
@@ -706,7 +736,7 @@ def _begroting_per_cohort(jaar, suffix, gemeente, referentie, reserve):
     referentiegroep defaulting to every gemeente it would only draw the same line twice.
     """
     jaren = sorted(
-        Iv3Summary.objects.filter(jaar__lte=jaar, verslagsoort__endswith=suffix)
+        Iv3Summary.objects.filter(jaar__gte=2018, jaar__lte=jaar, verslagsoort__endswith=suffix)
         .values_list("jaar", flat=True)
         .distinct()
     )
@@ -735,7 +765,7 @@ def _begroting_per_verslagsoort(jaar, gemeente, referentie, reserve):
     only what the selected year actually has.
     """
     jaren = sorted(
-        Iv3Summary.objects.filter(jaar__lte=jaar).values_list("jaar", flat=True).distinct()
+        Iv3Summary.objects.filter(jaar__gte=2018, jaar__lte=jaar).values_list("jaar", flat=True).distinct()
     )
 
     # The rows *are* the selection: what this page measures is decided in the WHERE rather than
@@ -812,7 +842,7 @@ def begroting(
                 "name": str(chart_jaar),
                 **{
                     reeks["key"]: meting(
-                        per_jaar[chart_jaar][reeks["key"]], LIJN_METRICS["uitgaven"]
+                        per_jaar[chart_jaar][reeks["key"]], _get_lijn_metrics()["uitgaven"]
                     )
                     for reeks in lijn_reeksen
                 },
@@ -896,7 +926,7 @@ def benchmark(
     referentie = referentie or []
 
     jaren = sorted(
-        Iv3Summary.objects.filter(jaar__lte=jaar, verslagsoort__endswith=suffix)
+        Iv3Summary.objects.filter(jaar__gte=2018, jaar__lte=jaar, verslagsoort__endswith=suffix)
         .values_list("jaar", flat=True)
         .distinct()
     )
@@ -1125,7 +1155,7 @@ def baten(
     referentie = referentie or []
 
     jaren = sorted(
-        Iv3Summary.objects.filter(jaar__lte=jaar, verslagsoort__endswith=suffix)
+        Iv3Summary.objects.filter(jaar__gte=2018, jaar__lte=jaar, verslagsoort__endswith=suffix)
         .values_list("jaar", flat=True)
         .distinct()
     )
@@ -1303,7 +1333,7 @@ def lasten(
     referentie = referentie or []
 
     jaren = sorted(
-        Iv3Summary.objects.filter(jaar__lte=jaar, verslagsoort__endswith=suffix)
+        Iv3Summary.objects.filter(jaar__gte=2018, jaar__lte=jaar, verslagsoort__endswith=suffix)
         .values_list("jaar", flat=True)
         .distinct()
     )
@@ -1425,25 +1455,33 @@ def _lasten_donut_labels(jaar: int, hoofdtaakveld: str, reserve: bool) -> dict[s
 # the sixth is the solvabiliteit, which is a percentage off the balance sheet and is drawn by
 # rules of its own — see _solvabiliteit_pct and the pinning in managementoverzicht().
 
-MANAGEMENT_LIJNEN = {
-    # Total lasten — deliberately the same measure on the same cohort as Begroting's
-    # uitgavenPerJaar, so the two pages agree to the cent.
+_MANAGEMENT_DEFAULTS = {
     "uitgaven": lambda row: row.lasten,
-    # The *wide* heffingen, leges included: the card names 2.2.1, 2.2.2 and 3.7 outright. Not
-    # row.heffingen, which is the narrow pair Gemeentelijke Stand draws — the two disagree by
-    # design, see CATEGORIEEN_BATEN_LOKALE_HEFFINGEN.
     "belastingdruk": _baten_heffingen,
-    # Payroll and hired-in staff with the overhead taken out, and then the overhead on its own.
-    # The three partition the personele lasten exactly: (L1.1 off 0.4) + (L3.5.1 off 0.4) +
-    # (both on 0.4) == salarissen + inhuur, which is what the Benchmark page draws.
-    #
-    # These can come out negative for a handful of gemeenten, and that is the data rather than
-    # a bug: a correction booked against a non-overhead taakveld can leave the categorie's total
-    # below what sits on 0.4 alone (10 rows of 6398, e.g. GM1903's 2019 Jaarrekening).
     "salarissen": lambda row: row.salarissen - row.salarissen_overhead,
     "inhuur": lambda row: row.inhuur - row.inhuur_overhead,
     "overhead": lambda row: row.salarissen_overhead + row.inhuur_overhead,
 }
+
+# Mapping from MANAGEMENT_LIJNEN key to Measure DB key.
+_MANAGEMENT_MEASURE_KEYS = {
+    "uitgaven": "uitgaven",
+    "salarissen": "mgmt-salarissen",
+    "inhuur": "mgmt-inhuur",
+    "overhead": "mgmt-overhead",
+}
+
+
+def _get_management_lijnen() -> dict:
+    """Build the MANAGEMENT_LIJNEN dict, preferring DB-defined measures."""
+    result = {}
+    for key, default in _MANAGEMENT_DEFAULTS.items():
+        db_key = _MANAGEMENT_MEASURE_KEYS.get(key)
+        if db_key:
+            result[key] = get_measure_fn(db_key, fallback=default)
+        else:
+            result[key] = default
+    return result
 
 # One JSON column for six lines. The balans pair rides along because the solvabiliteit reads it
 # off these same rows whenever the page is already drawn from a Jaarrekening — see
@@ -1479,7 +1517,7 @@ def _solvabiliteit_pct(rows) -> float | None:
     ratios = [row.eigen_vermogen / row.balanstotaal * 100 for row in rows if row.balanstotaal]
     if not ratios:
         return None
-    return round(sum(ratios) / len(ratios), 2)
+    return _round(sum(ratios) / len(ratios))
 
 
 def _management_per_jaar(jaar: int, suffix: str, gemeente, referentie, reserve: bool, velden):
@@ -1494,7 +1532,7 @@ def _management_per_jaar(jaar: int, suffix: str, gemeente, referentie, reserve: 
     only the balans pair.
     """
     jaren = sorted(
-        Iv3Summary.objects.filter(jaar__lte=jaar, verslagsoort__endswith=suffix)
+        Iv3Summary.objects.filter(jaar__gte=2018, jaar__lte=jaar, verslagsoort__endswith=suffix)
         .values_list("jaar", flat=True)
         .distinct()
     )
@@ -1586,7 +1624,7 @@ def managementoverzicht(
                 }
                 for chart_jaar in jaren
             ]
-            for metric, meting in MANAGEMENT_LIJNEN.items()
+            for metric, meting in _get_management_lijnen().items()
         },
         # Kept out of `lijnen` rather than added to it: it is not the same question asked of
         # another figure. It is a percentage rather than euros, it is read off the balance sheet

@@ -25,6 +25,7 @@ def serialize_user(user):
         "email": user.email,
         "first_name": user.first_name,
         "last_name": user.last_name,
+        "is_admin": user.is_staff,
         "avatar_url": avatar_url,
     }
 

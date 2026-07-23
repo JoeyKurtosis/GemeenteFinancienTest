@@ -280,7 +280,11 @@ export function ChartContent({
                                 {...sharedAxisProps}
                                 domain={normalize ? [0, 100] : undefined}
                                 ticks={normalize ? [0, 50, 100] : undefined}
-                                tickFormatter={normalize ? (value: unknown) => `${value}%` : undefined}
+                                tickFormatter={
+                                    normalize
+                                        ? (value: unknown) => `${value}%`
+                                        : (value: unknown) => format(Number(value) || 0)
+                                }
                             />
                             {tooltip}
                             {series.map((s, i) => (

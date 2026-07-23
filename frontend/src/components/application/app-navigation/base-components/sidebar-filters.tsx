@@ -51,7 +51,7 @@ const withAllesRow = (options: FilterOption[], selected: Selection, onChange: (k
 const reservemutatiesRoutes = ["/begroting", "/baten", "/lasten", "/gemeentelijkestand"];
 
 /** Route prefixes where the "Verslagsoort" filter is relevant (matches sub-routes too). */
-const verslagsoortRoutes = ["/gemeentelijkestand", "/benchmark"];
+const verslagsoortRoutes = ["/gemeentelijkestand", "/benchmark", "/baten"];
 
 export interface SidebarFiltersState {
     selectedGemeente: Key | null;
