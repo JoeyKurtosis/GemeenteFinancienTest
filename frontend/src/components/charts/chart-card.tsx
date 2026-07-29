@@ -77,6 +77,13 @@ interface ChartCardProps {
      * `valueFormat="percent"` with it — the segments then carry a share, not a bedrag.
      */
     normalize?: boolean;
+    /**
+     * The total to print at the end of each bar, one per row, in `data` order
+     * (`horizontal-bar` only). Without it the label is the sum of the row's segments, which is
+     * not the same number: each segment is rounded on its way here, and the rounding does not
+     * cancel. Pass the backend's `totalen`, which is the total measured and rounded once.
+     */
+    totals?: number[];
     /** Show a skeleton placeholder instead of the chart while data loads. */
     isLoading?: boolean;
     /**
@@ -100,13 +107,14 @@ export function ChartCard({
     expandable = false,
     valueFormat = "euro",
     normalize = false,
+    totals,
     isLoading = false,
     maxHeight,
     className,
 }: ChartCardProps) {
     const [isExpanded, setIsExpanded] = useState(false);
 
-    const chartContentProps = { data, series, chartType, xAxisKey, xAxisLabel, yAxisLabel, showLegend, valueFormat, normalize };
+    const chartContentProps = { data, series, chartType, xAxisKey, xAxisLabel, yAxisLabel, showLegend, valueFormat, normalize, totals };
 
     return (
         <>
@@ -166,6 +174,8 @@ interface ChartContentProps {
     valueFormat?: ValueFormat;
     /** See ChartCardProps.normalize. */
     normalize?: boolean;
+    /** See ChartCardProps.totals. */
+    totals?: number[];
     height?: number;
     maxHeight?: number;
 }
@@ -180,6 +190,7 @@ export function ChartContent({
     showLegend = true,
     valueFormat = "euro",
     normalize = false,
+    totals,
     height = 300,
     maxHeight,
 }: ChartContentProps) {
@@ -332,7 +343,11 @@ export function ChartContent({
                                             position="right"
                                             content={({ x, y, width, height: h, index }) => {
                                                 const entry = data[index ?? 0];
-                                                const total = series.reduce((sum, s) => sum + (Number(entry?.[s.key]) || 0), 0);
+                                                // The measured total where the caller has one;
+                                                // the segments only add up to it by luck.
+                                                const total =
+                                                    totals?.[index ?? 0] ??
+                                                    series.reduce((sum, s) => sum + (Number(entry?.[s.key]) || 0), 0);
                                                 return (
                                                     <text
                                                         x={(x as number) + (width as number) + 8}

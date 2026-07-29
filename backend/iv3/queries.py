@@ -386,7 +386,12 @@ def _saldo_pct(rows) -> float | None:
     return round((baten - lasten) / (baten + lasten) * 100, 1)
 
 
-def _apply_reservemutaties(rows, baten_verdeling: bool = False, lasten_verdeling: bool = False):
+def _apply_reservemutaties(
+    rows,
+    baten_verdeling: bool = False,
+    lasten_verdeling: bool = False,
+    hoofdtaakveld_verdeling: bool = False,
+):
     """Fold the 0.10 Mutaties reserves taakveld back into the totals.
 
     The sync keeps it in its own columns precisely so this is a choice made per request.
@@ -398,8 +403,15 @@ def _apply_reservemutaties(rows, baten_verdeling: bool = False, lasten_verdeling
     its centre. The Lasten breakdowns are folded for the same reason, 0.10 being a taakveld of
     hoofdtaakveld 0 like any other.
 
-    per_hoofdtaakveld and per_hoofdcategorie are deliberately left alone: Gemeentelijke Stand
-    and Begroting have always drawn them reserve-free, and those pages are not in the business
+    per_hoofdtaakveld moves only under its own flag, because the two pages that draw it disagree.
+    Begroting needs it folded: its "Uitgaven per hoofdtaakveld" bar prints the same total as the
+    Resultaat card above it, and that total is `lasten` with the reservemutaties in it — without
+    the fold the bar read EUR 3.559 per inwoner where the card read EUR 3.657, on one page, for
+    one cohort. The reservemutaties land whole in hoofdtaakveld 0, 0.10 being one of its
+    taakvelden. Gemeentelijke Stand leaves it off, and passes the flag accordingly.
+
+    per_hoofdcategorie is deliberately left alone throughout: Gemeentelijke Stand
+    and Begroting have always drawn it reserve-free, and those pages are not in the business
     of this toggle. The Lasten pages read lasten_per_taakveld instead — which is also why the
     two agree exactly when this is not applied.
 
@@ -422,6 +434,14 @@ def _apply_reservemutaties(rows, baten_verdeling: bool = False, lasten_verdeling
                 row.overige_baten_per_hoofdcategorie[hoofdcategorie] = (
                     row.overige_baten_per_hoofdcategorie.get(hoofdcategorie, 0.0) + bedrag
                 )
+
+    if hoofdtaakveld_verdeling:
+        # Whole into hoofdtaakveld 0: 0.10 is one of its taakvelden, so no split is needed.
+        hoofdtaakveld = d.TAAKVELD_RESERVEMUTATIES.split(".")[0]
+        for row in rows:
+            row.per_hoofdtaakveld[hoofdtaakveld] = (
+                row.per_hoofdtaakveld.get(hoofdtaakveld, 0.0) + row.reserve_lasten
+            )
 
     if lasten_verdeling:
         hoofdtaakveld = d.TAAKVELD_RESERVEMUTATIES.split(".")[0]
@@ -665,16 +685,22 @@ def _verdeling(snapshot, cohorten, veld: str, labels: dict[str, str], meting) ->
     the two verslagsoorten on a Begroting-versus-Jaarrekening one.
     """
     rijen = []
+    totalen = []
     for cohort in cohorten:
         rows = snapshot.get(cohort["key"], [])
         rij = {"name": cohort["label"]}
         for code in labels:
             rij[code] = meting(rows, lambda row, code=code: getattr(row, veld).get(code, 0.0))
         rijen.append(rij)
+        # Measured and rounded once, not summed from the rounded segments — see _bronnen.
+        totalen.append(
+            meting(rows, lambda row: sum(getattr(row, veld).get(code, 0.0) for code in labels))
+        )
 
     return {
         "series": [{"key": code, "name": label} for code, label in labels.items()],
         "data": rijen,
+        "totalen": totalen,
     }
 
 
@@ -689,6 +715,9 @@ def _bronnen(snapshot, reeksen, bronnen: dict, meting) -> dict:
     and the segments have to add up to it — which is why each ends in a residual rather than in
     one more named measure that might leave a gap.
     """
+    def totaal(row):
+        return sum(measure(row) for _, measure in bronnen.values())
+
     return {
         "series": [{"key": key, "name": label} for key, (label, _) in bronnen.items()],
         "data": [
@@ -701,6 +730,14 @@ def _bronnen(snapshot, reeksen, bronnen: dict, meting) -> dict:
             }
             for reeks in reeksen
         ],
+        # The bar's total, measured and rounded once instead of summed from the rounded segments.
+        # The two differ by a euro often enough to notice: the 2024 Begroting's lokale heffingen
+        # come to EUR 668,63 per inwoner for the referentiegroep, which is 669 — but its five
+        # segments each round down far enough that they add to 668. The report prints the rounded
+        # total, and a bar whose end label disagrees with its own arithmetic is the kind of thing
+        # a reader checks with a calculator. Segments stay independently rounded, so each of them
+        # still matches the report too.
+        "totalen": [meting(snapshot.get(reeks["key"], []), totaal) for reeks in reeksen],
     }
 
 
@@ -718,21 +755,43 @@ def _bronnen(snapshot, reeksen, bronnen: dict, meting) -> dict:
 # on the other two. Everything below the bucketing is written against reeksen and does not
 # care which it is drawing.
 
-# Where the money comes from. "overig" is the residual: the summary table stores the three
-# sources that can be pinned to a categorie, and everything else is what is left of baten.
-# `heffingen` here is the narrow one (no leges) — the Lokale heffingen bar below splits the
-# wider `baten_heffingen_per_categorie`, and the two genuinely disagree. See definitions.py.
+# Where the money comes from. "overig" is the residual: what is left of baten once the rijk and
+# the heffingen are taken out.
 #
-# Three parts, not four: the algemene uitkering and the SPUKs are drawn as one Rijk, because
-# on a bar asking where a gemeente's money comes from the answer for both is the same
-# government. They stay two columns on Iv3Summary and two measures elsewhere — the Baten pages
-# still give the SPUKs a page of their own, where the question is what kind of rijksgeld it is
-# rather than whether it is rijksgeld. The residual subtracts both, so the three still
-# partition baten exactly.
+# The *wide* heffingen — baten_heffingen_per_categorie, leges included — and not the narrow
+# `heffingen` column beside it. Two reasons, and they agree. It is what the report draws: its
+# Lokale heffingen slice reads EUR 510 per inwoner for Aa en Hunze in the 2024 Begroting, which is
+# the wide figure; the narrow one is EUR 362. And it is what makes this page cohere, because the
+# Lokale heffingen bar below splits the wide column too — with the narrow one here, that bar would
+# print a total EUR 148 larger than the slice it details, and the leges would sit in the residual
+# on one chart and in the heffingen on the other. See CATEGORIEEN_BATEN_LOKALE_HEFFINGEN for why
+# the two columns exist at all.
+#
+# Four parts, split where the report splits them: the algemene uitkering uit het gemeentefonds
+# and the specifieke uitkeringen are drawn apart, not as one Rijk. The two were merged here for a
+# while on the reasoning that a bar asking where the money comes from answers "the government"
+# either way — but the report draws four slices and the page is read against the report, and the
+# distinction it is drawing is a real one: the algemene uitkering is free to spend and a SPUK is
+# not. The Baten pages already gave the SPUKs a page of their own, so the split costs nothing new.
+#
+# The labels are BATEN_BRON_LABELS rather than strings of their own, which is what keeps this bar
+# and the Baten donuts naming the same four bronnen the same way. The keys match that dict exactly;
+# they have to, because it is indexed by them.
+#
+# The four still partition baten exactly — the residual subtracts both halves of the rijk — which
+# is what lets _bronnen print a total at the end of the bar that its segments add up to.
+def _heffingen_breed(r) -> float:
+    return sum(r.baten_heffingen_per_categorie.values())
+
+
 INKOMSTEN_BRONNEN = {
-    "rijk": ("Rijk", lambda r: r.rijk + r.spuks),
-    "heffingen": ("Lokale heffingen", lambda r: r.heffingen),
-    "overig": ("Overige inkomsten", lambda r: r.baten - r.rijk - r.spuks - r.heffingen),
+    "rijk": (d.BATEN_BRON_LABELS["rijk"], lambda r: r.rijk),
+    "spuks": (d.BATEN_BRON_LABELS["spuks"], lambda r: r.spuks),
+    "heffingen": (d.BATEN_BRON_LABELS["heffingen"], _heffingen_breed),
+    "overig": (
+        d.BATEN_BRON_LABELS["overig"],
+        lambda r: r.baten - r.rijk - r.spuks - _heffingen_breed(r),
+    ),
 }
 
 # The hoofdcategorie the goederen en diensten sit in; `inhuur` (L3.5.1) is one of its
@@ -771,17 +830,20 @@ def _heffing_taakvelden(slice_label: str):
     return lambda r: sum(r.baten_heffingen_per_taakveld.get(code, 0.0) for code in codes)
 
 
-# The lokale heffingen as the report names them, in descending order of what they raise
-# nationally. Read off baten_heffingen_per_taakveld, because a heffing is what its taakveld says
-# it is — see BATEN_HEFFINGEN_TAAKVELDEN for why the categorie cannot answer this.
+# The lokale heffingen as the report names and orders them: OZB, riolering, afval, parkeren, rest.
+# Not by size — nationally the afvalheffing raises more than the rioolheffing — but this is the
+# order the bar has always been read in, and the segments keep their colours that way.
+#
+# Read off baten_heffingen_per_taakveld, because a heffing is what its taakveld says it is — see
+# BATEN_HEFFINGEN_TAAKVELDEN for why the categorie cannot answer this.
 #
 # The last is the residual against the categorie total, which is the same money counted the other
 # way: bouwleges, burgerzaken and a long tail that the report does not name individually. A
 # residual rather than a sixth measure, so the segments always sum to the bar's total.
 LOKALE_HEFFINGEN = {
     "ozb": ("Onroerendezaakbelasting", _heffing_taakvelden("Onroerendezaakbelasting")),
-    "afval": ("Afvalheffing", _heffing_taakvelden("Afvalheffing")),
     "riool": ("Rioolheffing", _heffing_taakvelden("Rioolheffing")),
+    "afval": ("Afvalheffing", _heffing_taakvelden("Afvalheffing")),
     "parkeren": ("Parkeerbelasting", _heffing_taakvelden("Parkeerbelasting")),
     "overig": (
         d.BATEN_HEFFINGEN_OVERIG_LABEL,
@@ -794,18 +856,20 @@ LOKALE_HEFFINGEN = {
 # the bijdragen uit reserves are hoofdcategorie 7 and the rente en dividenden hoofdcategorie 5,
 # both already in overige_baten_per_hoofdcategorie.
 #
-# Everything is measured off that one dict — including the reserves, rather than off the
-# `reserve_baten` column beside it — so the five partition it exactly whatever the sidebar toggle
-# is set to. With the toggle on, _apply_reservemutaties has already folded
-# reserve_baten_per_hoofdcategorie into it and the bijdragen uit reserves grow accordingly; with
-# it off they are the handful of hoofdcategorie-7 baten booked outside taakveld 0.10. Reading
-# `reserve_baten` here instead would double-count with the toggle on and leave the residual
-# wrong with it off.
+# The bijdragen uit reserves are the reservemutaties themselves — taakveld 0.10 — and not the
+# whole of hoofdcategorie 7, which also carries afschrijvingen and voorzieningen. The report reads
+# EUR 135 per inwoner for the 2024 Begroting referentiegroep where hoofdcategorie 7 comes to 199;
+# the reservemutaties alone come to 134.
+#
+# Read through `gevouwen_reserve_baten` rather than off `reserve_baten` directly, because this
+# slice has to be exactly the part of the bar's own total that came from 0.10. _begroting_rows
+# sets it to reserve_baten when the sidebar toggle folded those euros into
+# overige_baten_per_hoofdcategorie and to zero when it did not — so with the toggle off the money
+# is absent from the total and absent from this slice alike, and the residual below stays right
+# either way. Reading `reserve_baten` straight would make this slice larger than the bar with the
+# toggle off, and drive the residual negative.
 OVERIGE_INKOMSTEN = {
-    "reserves": (
-        "Bijdragen uit reserves",
-        lambda r: r.overige_baten_per_hoofdcategorie.get(d.HOOFDCATEGORIE_RESERVES, 0.0),
-    ),
+    "reserves": ("Bijdragen uit reserves", lambda r: r.gevouwen_reserve_baten),
     "grond": (
         "Inkomsten uit grond",
         lambda r: r.overige_baten_grond_huren.get(d.CATEGORIE_BATEN_GROND, 0.0),
@@ -824,10 +888,51 @@ OVERIGE_INKOMSTEN = {
     "overig": (
         "Overige inkomsten",
         lambda r: sum(r.overige_baten_per_hoofdcategorie.values())
-        - r.overige_baten_per_hoofdcategorie.get(d.HOOFDCATEGORIE_RESERVES, 0.0)
+        - r.gevouwen_reserve_baten
         - r.overige_baten_per_hoofdcategorie.get(d.HOOFDCATEGORIE_RENTE, 0.0)
         - sum(r.overige_baten_grond_huren.values()),
     ),
+}
+
+
+def _naamloos_totaal(row) -> float:
+    """The lasten on the taakvelden the source never names, across every hoofdcategorie."""
+    return sum(row.naamloze_lasten_per_hoofdcategorie.values())
+
+
+# The slice the taakvelden without a name go into, on the Begroting bar and the Lasten donut
+# alike. The report writes it as Power BI's own empty-value label, and it is reproduced verbatim
+# — a reader comparing the two screens should find the same word.
+LEEG_TAAKVELD = "leeg"
+LEEG_TAAKVELD_LABEL = "(Leeg)"
+
+
+def _hoofdtaakveld_zonder_naamlozen(code: str):
+    """One hoofdtaakveld's lasten, with the unnamed taakvelden taken out of the one that has them."""
+    if code != d.TAAKVELD_SOCIAAL_DOMEIN:
+        return lambda r: r.per_hoofdtaakveld.get(code, 0.0)
+    return lambda r: r.per_hoofdtaakveld.get(code, 0.0) - _naamloos_totaal(r)
+
+
+# Uitgaven per hoofdtaakveld, with the report's "(Leeg)" bucket in front of the nine.
+#
+# That bucket is the jeugdhulp on taakvelden the source never names —
+# TAAKVELD_LABELS_ZONDER_BRON, the 6.73 through 6.79 codes. The report has no label to file them
+# under, so they fall out of hoofdtaakveld 6 and into a blank of their own: EUR 27 per inwoner for
+# Aa en Hunze in the 2024 Begroting, EUR 122 for the referentiegroep. Reproduced deliberately,
+# because the bar is read against that report — but it is the report's gap, not a fact about the
+# money. Every euro here is sociaal domein, and this codebase does have names for the codes (see
+# TAAKVELD_LABELS in definitions.py). Naming the segment would be the better chart and the wrong
+# answer to "make it match".
+#
+# Everything still adds to `lasten`: the bucket is subtracted from hoofdtaakveld 6 rather than
+# added beside it.
+UITGAVEN_HOOFDTAAKVELDEN = {
+    LEEG_TAAKVELD: (LEEG_TAAKVELD_LABEL, _naamloos_totaal),
+    **{
+        code: (label, _hoofdtaakveld_zonder_naamlozen(code))
+        for code, label in d.HOOFDTAAKVELD_LABELS.items()
+    },
 }
 
 
@@ -859,6 +964,7 @@ BEGROTING_VELDEN = (
     "rijk", "spuks", "heffingen",  # INKOMSTEN_BRONNEN — "overig" is baten minus these three
     "salarissen", "inhuur",  # UITGAVEN_KOSTENSOORTEN, alongside per_hoofdcategorie below
     "per_hoofdtaakveld", "per_hoofdcategorie",  # _verdeling
+    "naamloze_lasten_per_hoofdcategorie",  # UITGAVEN_HOOFDTAAKVELDEN — the "(Leeg)" segment
     # LOKALE_HEFFINGEN reads both heffingen columns: the taakveld cut for its four named slices
     # and the categorie cut for the total its residual is taken against. OVERIGE_INKOMSTEN reads
     # the grond/huren cut on top of the hoofdcategorie split already in the reserve parts above.
@@ -920,9 +1026,16 @@ def _begroting_rows(chart_jaar: int, suffix: str, reserve: bool, codes=None) -> 
     # *residual* off zero, which is a different question.
     rows = _filter_niet_indieners(list(rows.only(*BEGROTING_VELDEN)))
     if reserve:
-        # The baten side only: this page draws overige_baten_per_hoofdcategorie, and none of the
-        # lasten breakdowns.
-        _apply_reservemutaties(rows, baten_verdeling=True)
+        # The baten breakdown and the hoofdtaakveld one: this page draws
+        # overige_baten_per_hoofdcategorie and per_hoofdtaakveld, and neither of the two lasten
+        # columns the lasten_verdeling flag moves.
+        _apply_reservemutaties(rows, baten_verdeling=True, hoofdtaakveld_verdeling=True)
+    # How much of overige_baten_per_hoofdcategorie is reservemutaties, which is what the Overige
+    # inkomsten bar draws as its bijdragen uit reserves. Set either way rather than only under the
+    # toggle, so the measure never meets an attribute that is missing — and zero when the fold did
+    # not happen is the honest answer, the euros being absent from the bar's total as well.
+    for row in rows:
+        row.gevouwen_reserve_baten = row.reserve_baten if reserve else 0.0
     return rows
 
 
@@ -1048,9 +1161,9 @@ def begroting(
         ],
         "inkomsten": _bronnen(snapshot, reeksen, INKOMSTEN_BRONNEN, meting),
         "verdeling": {
-            "hoofdtaakveld": _verdeling(
-                snapshot, reeksen, "per_hoofdtaakveld", d.HOOFDTAAKVELD_LABELS, meting
-            ),
+            # Measured rather than read straight off per_hoofdtaakveld: the sociaal domein has
+            # the report's "(Leeg)" bucket taken out of it. See UITGAVEN_HOOFDTAAKVELDEN.
+            "hoofdtaakveld": _bronnen(snapshot, reeksen, UITGAVEN_HOOFDTAAKVELDEN, meting),
             # Measured rather than read off per_hoofdcategorie — see UITGAVEN_KOSTENSOORTEN.
             # The key stays "hoofdcategorie": it is what the frontend reads this bar under, and
             # the bar is still the kostensoort side of the page.
@@ -1456,27 +1569,68 @@ LASTEN_VELDEN = (
     *_VELDEN_BASIS,
     *_VELDEN_RESERVE_TOTALEN,  # the overview's totaal is row.lasten
     *_VELDEN_RESERVE_LASTEN_VERDELING,  # _lasten_per_hoofdtaakveld, _lasten_categorieen, the donut
+    "resultaat_lasten_per_hoofdcategorie",  # _resultaat_lasten — the overview draws 0.11 too
 )
 
 
+def _resultaat_lasten(row) -> float:
+    """Taakveld 0.11's lasten, which the Lasten overview draws and no other page does.
+
+    See Iv3Summary.resultaat_lasten_per_hoofdcategorie for why it is kept out of `lasten` and why
+    the Lasten pages add it back. On the overview it joins hoofdtaakveld 0's slice; on that
+    hoofdtaakveld's own detail page it is a slice of its own, 0.11 being one of its taakvelden —
+    which is how the report draws it, legend entry and all. The other eight detail pages never
+    see it.
+    """
+    return sum(row.resultaat_lasten_per_hoofdcategorie.values())
+
+
 def _lasten_per_hoofdtaakveld(row) -> dict[str, float]:
-    """lasten_per_taakveld rolled up to the hoofdtaakveld — the overview donut's slices."""
+    """lasten_per_taakveld rolled up to the hoofdtaakveld — the overview donut's slices.
+
+    The taakvelden the source never names go to a slice of their own rather than into the
+    hoofdtaakveld they belong to, which is how the report draws them and why the Begroting page's
+    bar does the same — see queries.UITGAVEN_HOOFDTAAKVELDEN for the whole story. It is all
+    jeugdhulp and all sociaal domein; the report simply has no label to file it under.
+    """
     waarden: dict[str, float] = {}
     for code, bedrag in row.lasten_per_taakveld.items():
-        hoofd = code.split(".")[0]
+        hoofd = LEEG_TAAKVELD if code in d.TAAKVELD_LABELS_ZONDER_BRON else code.split(".")[0]
         waarden[hoofd] = waarden.get(hoofd, 0.0) + bedrag
+    # 0.11 is a taakveld of hoofdtaakveld 0 like any other, so it joins the slice it belongs to.
+    hoofd_resultaat = d.TAAKVELD_RESULTAAT.split(".")[0]
+    waarden[hoofd_resultaat] = waarden.get(hoofd_resultaat, 0.0) + _resultaat_lasten(row)
     return waarden
 
 
 def _lasten_categorieen(row, hoofdtaakveld: str | None) -> dict[str, float]:
-    """Lasten per hoofdcategorie, for one hoofdtaakveld or across all of them."""
+    """Lasten per hoofdcategorie, for one hoofdtaakveld or across all of them.
+
+    A detail page leaves out the taakvelden the source never names, exactly as its donut does —
+    see totaal() in lasten(). Taken out per hoofdcategorie rather than as a lump, because the
+    kostensoort bar that reads this splits hoofdcategorie 3 from the rest, and the jeugdhulp
+    money is mostly but not only goederen en diensten.
+    """
     if hoofdtaakveld is not None:
-        return row.lasten_per_hoofdtaakveld_categorie.get(hoofdtaakveld, {})
+        eigen = dict(row.lasten_per_hoofdtaakveld_categorie.get(hoofdtaakveld, {}))
+        if hoofdtaakveld == d.TAAKVELD_SOCIAAL_DOMEIN:
+            for code, bedrag in row.naamloze_lasten_per_hoofdcategorie.items():
+                eigen[code] = eigen.get(code, 0.0) - bedrag
+        # 0.11 is a taakveld of hoofdtaakveld 0, so its page carries it — donut and kostensoort
+        # bar alike, which is what keeps the two agreeing on a total.
+        if hoofdtaakveld == d.TAAKVELD_RESULTAAT.split(".")[0]:
+            for code, bedrag in row.resultaat_lasten_per_hoofdcategorie.items():
+                eigen[code] = eigen.get(code, 0.0) + bedrag
+        return eigen
 
     waarden: dict[str, float] = {}
     for categorieen in row.lasten_per_hoofdtaakveld_categorie.values():
         for code, bedrag in categorieen.items():
             waarden[code] = waarden.get(code, 0.0) + bedrag
+    # Across all of them means across 0.11 too, so the kostensoort bar keeps summing to the
+    # donut beside it. It lands almost entirely in hoofdcategorie 7.
+    for code, bedrag in row.resultaat_lasten_per_hoofdcategorie.items():
+        waarden[code] = waarden.get(code, 0.0) + bedrag
     return waarden
 
 
@@ -1502,9 +1656,20 @@ def lasten(
 
     # The centre of the donut, and the figure the trend and the bars draw. On a detail page it
     # is that hoofdtaakveld's share of the lasten; on the overview, all of them.
+    # Taakveld 0.11 belongs to hoofdtaakveld 0, so only that detail page carries it.
+    resultaat_hoofdtaakveld = d.TAAKVELD_RESULTAAT.split(".")[0]
+    toont_resultaat = overzicht or hoofdtaakveld == resultaat_hoofdtaakveld
+
     def totaal(row) -> float:
         if overzicht:
-            return row.lasten
+            return row.lasten + _resultaat_lasten(row)
+        # _lasten_categorieen has already left out the taakvelden without a name: a detail page
+        # drops them altogether rather than moving them to a "(Leeg)" slice as the overview does
+        # — the report's Sociaal domein donut reads EUR 1.099 per inwoner for Aa en Hunze against
+        # EUR 1.126 of hoofdtaakveld 6, and names no bucket for the difference. So the nine detail
+        # pages add up to the overview minus that money, on top of the 0.11 gap the other eight
+        # also carry.
+        # _lasten_categorieen already carries 0.11 on the page that owns it, so nothing to add.
         return sum(_lasten_categorieen(row, hoofdtaakveld).values())
 
     suffix = verslagsoort[-3:]
@@ -1545,15 +1710,22 @@ def lasten(
     landelijk = cohorten[-1]
 
     labels = (
-        d.HOOFDTAAKVELD_LABELS
+        # "(Leeg)" first, as the report orders it — see _lasten_per_hoofdtaakveld.
+        {LEEG_TAAKVELD: LEEG_TAAKVELD_LABEL, **d.HOOFDTAAKVELD_LABELS}
         if overzicht
         else _lasten_donut_labels(jaar, hoofdtaakveld, reserve)
     )
-    waarden = (
-        _lasten_per_hoofdtaakveld
-        if overzicht
-        else (lambda row: row.lasten_per_taakveld)
-    )
+    def detail_waarden(row) -> dict[str, float]:
+        waarden = {
+            code: bedrag
+            for code, bedrag in row.lasten_per_taakveld.items()
+            if code not in d.TAAKVELD_LABELS_ZONDER_BRON
+        }
+        if toont_resultaat:
+            waarden[d.TAAKVELD_RESULTAAT] = _resultaat_lasten(row)
+        return waarden
+
+    waarden = _lasten_per_hoofdtaakveld if overzicht else detail_waarden
     pagina = {"totaal": totaal, "waarden": waarden, "labels": labels}
 
     return {
@@ -1580,11 +1752,12 @@ def lasten(
             "links": _donut_zijde(links or landelijk, snapshot, pagina),
             "rechts": _donut_zijde(rechts or landelijk, snapshot, pagina),
         },
-        # And the same money by kostensoort — one bar per cohort, stacked by hoofdcategorie.
-        # The report splits this by a grouping column of its own that the thin file does not
-        # carry; the hoofdcategorie is what its overview page demonstrably uses, so it stands in
-        # on the detail pages too.
-        "categorie": {
+        # And the same money by kostensoort — one bar per cohort. The overview stacks it by
+        # hoofdcategorie, all seven of them; a detail page cuts it the four ways the report cuts
+        # it there. Both are the report's own choice, and it makes a different one per page.
+        "categorie": _lasten_kostensoort_bar(cohorten, snapshot, hoofdtaakveld)
+        if hoofdtaakveld is not None
+        else {
             "series": [
                 {"key": code, "name": label} for code, label in d.HOOFDCATEGORIE_LABELS.items()
             ],
@@ -1610,6 +1783,63 @@ def lasten(
     }
 
 
+def _lasten_kostensoort_bar(cohorten, snapshot, hoofdtaakveld: str) -> dict:
+    """One hoofdtaakveld's lasten split the four ways a Lasten detail page draws them.
+
+    The same four the Begroting page's "Uitgaven per kostensoort" uses — see
+    UITGAVEN_KOSTENSOORTEN — narrowed to one hoofdtaakveld. Sociaal domein in the 2024 Begroting
+    reads EUR 123 / 8 / 503 / 641 per inwoner for the referentiegroep, which is the report's bar
+    to the euro.
+
+    `inhuur` is the one figure with no column of its own at this depth: personeel_per_hoofdtaakveld
+    is L1.1 plus L3.5.1, so subtracting the salarissen leaves the ingeleend personeel. It is taken
+    against the *raw* hoofdcategorie 1, not the one _lasten_categorieen hands back — both that raw
+    figure and the personeel column still carry the nameless taakvelden, so their difference is
+    clean, where mixing the two would leave those taakvelden's salarissen behind in the inhuur.
+
+    Partitions the page total exactly: L1.1 + L3.5.1 + (hoofdcategorie 3 - L3.5.1) + the rest.
+    """
+
+    def ruw(row) -> dict:
+        return row.lasten_per_hoofdtaakveld_categorie.get(hoofdtaakveld, {})
+
+    def inhuur(row) -> float:
+        return row.personeel_per_hoofdtaakveld.get(hoofdtaakveld, 0.0) - ruw(row).get("1", 0.0)
+
+    def goederen(row) -> float:
+        return _lasten_categorieen(row, hoofdtaakveld).get(_HOOFDCATEGORIE_GOEDEREN, 0.0)
+
+    kostensoorten = {
+        "salarissen": (
+            "Salarissen en sociale lasten",
+            lambda row: _lasten_categorieen(row, hoofdtaakveld).get("1", 0.0),
+        ),
+        "inhuur": ("Ingeleend personeel", inhuur),
+        "goederen": ("Overige goederen en diensten", lambda row: goederen(row) - inhuur(row)),
+        "overig": (
+            "Overige lasten",
+            lambda row: sum(_lasten_categorieen(row, hoofdtaakveld).values())
+            - _lasten_categorieen(row, hoofdtaakveld).get("1", 0.0)
+            - goederen(row),
+        ),
+    }
+
+    return {
+        "series": [{"key": key, "name": label} for key, (label, _) in kostensoorten.items()],
+        "data": [
+            {
+                "key": cohort["key"],
+                "name": cohort["label"],
+                **{
+                    key: _per_inwoner_mean(snapshot.get(cohort["key"], []), measure)
+                    for key, (_, measure) in kostensoorten.items()
+                },
+            }
+            for cohort in cohorten
+        ],
+    }
+
+
 def _lasten_donut_labels(jaar: int, hoofdtaakveld: str, reserve: bool) -> dict[str, str]:
     """The taakvelden inside one hoofdtaakveld, named as `jaar` names them.
 
@@ -1623,6 +1853,10 @@ def _lasten_donut_labels(jaar: int, hoofdtaakveld: str, reserve: bool) -> dict[s
     codes = Iv3Taakveld.objects.filter(jaar=jaar, code__startswith=f"{hoofdtaakveld}.")
     if not reserve:
         codes = codes.exclude(code=d.TAAKVELD_RESERVEMUTATIES)
+    # The nameless ones are not drawn here — see totaal() in lasten(). They carry a name in this
+    # table, invented by TAAKVELD_LABEL_OVERRIDES, which is exactly why they have to be excluded
+    # by code rather than falling out for want of a label.
+    codes = codes.exclude(code__in=d.TAAKVELD_LABELS_ZONDER_BRON)
     return {taakveld.code: f"{taakveld.code} {taakveld.titel}" for taakveld in codes}
 
 

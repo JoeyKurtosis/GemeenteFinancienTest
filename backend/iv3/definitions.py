@@ -24,9 +24,32 @@ BEDRAG_FACTOR = 1000
 BALANSPOST_PREFIXES = ("A", "P")
 
 # Mutations of the reserves are a taakveld like any other, which is what the sidebar's
-# reservemutaties toggle switches on. 0.11 is the resulting saldo — counting it alongside
-# the lasten and baten it is derived from would double the result.
+# reservemutaties toggle switches on.
 TAAKVELD_RESERVEMUTATIES = "0.10"
+
+# 0.11 is the saldo of the very rows the rest of this module adds up, and the two sides of it are
+# treated differently — deliberately, and not symmetrically:
+#
+#   * Its LASTEN are a surplus booked to close the begroting. Counting them alongside the lasten
+#     they are derived from would add a gemeente's begrotingsresultaat to its spending, so
+#     _AGGREGATE drops them and _RESULTAAT reads them into their own column for the one page that
+#     draws them (Iv3Summary.resultaat_lasten_per_hoofdcategorie).
+#
+#   * Its BATEN are the mirror image — a deficit booked as income — and are kept, landing in
+#     `baten` and in the residual bron like any other B row. Analytically that is the same
+#     objection as above; it is kept anyway because it is what the report counts, and the Baten
+#     and Begroting pages are read against the report.
+#
+# That asymmetry is the report's, established by measurement rather than assumed. Against the old
+# dashboard's Baten page (Aa en Hunze, 2024 Begroting, reservemutaties on) the per-gemeente
+# shortfall in `baten` was exactly 0.11's baten — Assen EUR 361/inw, Schiermonnikoog 73,
+# Vlaardingen 11, and zero for the fifteen of eighteen gemeenten that already agreed to the euro.
+# Adding them back reproduces the referentiegroep's baten to within EUR 0,50 per inwoner in 2018,
+# 2020, 2022 and 2024 alike. The lasten stay out on the same evidence: the referentiegroep's
+# uitgaven read EUR 3.657/inw on both dashboards, and folding 0.11's lasten in would make it 3.679.
+#
+# The cost of that faithfulness is that on this page baten and lasten no longer close against each
+# other: the Begroting page's resultaat row is the saldo *plus* whatever 0.11 carries.
 TAAKVELD_RESULTAAT = "0.11"
 
 # The sociaal domein subdivides its taakvelden a level deeper than the rest, and has done it
@@ -238,6 +261,12 @@ HOOFDCATEGORIE_LABELS = {
 # baten for the 2023 Jaarrekening. sync_iv3_summary keeps that identity true per gemeente and
 # checks it on every run (_baten_gaan_op) — it is what makes each donut's slices add up to the
 # figure printed in its centre.
+#
+# The partition survives taakveld 0.11's baten being let into `baten` (see TAAKVELD_RESULTAAT):
+# they are an ordinary B row and _accumulate routes them into the residual like any other. The
+# four *figures* do not — only "overig" and the total move, and only they need rechecking once
+# the warehouse has been re-read. Estimated off the closing identity at roughly 640 -> 671 and
+# 4317 -> 4348 for this report; measure them rather than trust that arithmetic.
 BATEN_BRON_LABELS = {
     "rijk": "Rijk",  # EUR 2312/inw
     "spuks": "Overige baten rijk",  # EUR 655/inw
@@ -321,6 +350,10 @@ BATEN_OVERIG_HOOFDCATEGORIE_LABELS = {
 TAAKVELD_LABEL_OVERRIDES = {
     # Completed: the warehouse's own name, cut off at ~40 characters. Prefix-checked.
     "0.7": "Algemene uitkeringen en overige uitkeringen gemeentefonds",
+    # Named because the Lasten detail page for hoofdtaakveld 0 draws it as a slice, which no
+    # other page does — see queries._resultaat_lasten. Without this it falls out of Iv3Taakveld
+    # on the truncation check and the slice would have no label to appear under.
+    "0.11": "Resultaat van de rekening van baten en lasten",
     "5.3": "Cultuurpresentatie, cultuurproductie en cultuurparticipatie",
     "5.7": "Openbaar groen en (openlucht) recreatie",
     "6.23": "Toegang en eerstelijnsvoorz. Integraal",
@@ -338,6 +371,8 @@ TAAKVELD_LABEL_OVERRIDES = {
 # for a stem to check them against. 6.73/6.74 are the 2024-and-earlier scheme, 6.75/6.76/6.79
 # the one from 2025 — which is why both a 6.73 and a 6.76 mean "Jeugdhulp met verblijf": they
 # are the same money under two numberings, and no year carries both.
+# All of these sit in hoofdtaakveld TAAKVELD_SOCIAAL_DOMEIN, which is what lets the Begroting
+# page take them out of it — see queries.UITGAVEN_HOOFDTAAKVELDEN.
 TAAKVELD_LABELS_ZONDER_BRON = ("6.73", "6.74", "6.75", "6.76", "6.79")
 
 

@@ -118,10 +118,19 @@ SELECT
     split_part(taakveld, ' ', 1) AS code,
     sum(bedrag)                  AS bedrag
 FROM feiten
--- The balance sheet (A*/P*) is not income or expenditure, and 0.11 is the saldo of the
--- very rows being added up here.
+-- The balance sheet (A*/P*) is not income or expenditure. Taakveld 0.11 Resultaat is dropped
+-- from the lasten and kept in the baten, which is the asymmetry the report has — see
+-- TAAKVELD_RESULTAAT in definitions.py for why, and _RESULTAAT below for where the lasten
+-- half goes instead.
+--
+-- A positive test on B rather than a negation of L, so that a 0.11 row whose categorie is
+-- somehow neither is dropped instead of silently entering the baten: NULL fails the second
+-- disjunct, and the first already keeps every taakveld that is not 0.11.
 WHERE taakveld !~ %(balanspost_re)s
-  AND split_part(taakveld, ' ', 1) <> %(resultaat)s
+  AND (
+        split_part(taakveld, ' ', 1) <> %(resultaat)s
+     OR categorie LIKE 'B%%'
+  )
 GROUP BY 1, 2, 3
 """
 
@@ -158,6 +167,39 @@ SELECT
     sum(bedrag) FILTER (WHERE post ~ %(passiva_re)s)        AS balanstotaal
 FROM standen
 GROUP BY 1
+"""
+
+
+# Taakveld 0.11 Resultaat's *lasten*, which _AGGREGATE drops on purpose — a surplus booked there
+# is the saldo of the very rows that query adds up, and letting it into `lasten` would add a
+# gemeente's begrotingsresultaat to its spending. A pass of its own instead, so the Lasten pages
+# can draw it the way the report does without any other page ever seeing it. See
+# Iv3Summary.resultaat_lasten_per_hoofdcategorie.
+#
+# Only the L side, and this is the whole of the asymmetry: 0.11's baten are not read here because
+# _AGGREGATE already keeps them, in `baten` and in the residual bron, exactly as the report counts
+# them. See TAAKVELD_RESULTAAT in definitions.py.
+#
+# Cheap next to _AGGREGATE and bounded by the same (jaar, verslagsoort) index: one taakveld out of
+# fifty-odd, and only the L side of it.
+#
+# `bedrag` resolves the sentinel exactly as the other two do.
+_RESULTAAT = f"""
+SELECT
+    trim(gemeenten)          AS gm_code,
+    substr(trim(categorie), 2, 1) AS hoofdcategorie,
+    sum(
+        CASE
+            WHEN "2eplaatsing" <> {d.GEEN_OPGAVE} THEN "2eplaatsing"
+            WHEN "1eplaatsing" <> {d.GEEN_OPGAVE} THEN "1eplaatsing"
+            ELSE 0
+        END
+    ) AS bedrag
+FROM gemeenten_iv3
+WHERE jaar = %(jaar)s AND verslagsoort = %(verslagsoort)s
+  AND trim(categorie) LIKE 'L%%'
+  AND split_part(trim(taakveldbalanspost), ' ', 1) = %(resultaat)s
+GROUP BY 1, 2
 """
 
 
@@ -280,11 +322,11 @@ class Command(BaseCommand):
             for rij in rijen:
                 # The warehouse writes "0.1 Bestuur": code, space, name.
                 code, _, titel = rij.partition(" ")
-                # 0.11 is the saldo of the very rows the donut draws — _AGGREGATE drops it, so
-                # no figure will ever reach it and naming it would only put an empty slice in
-                # the legend. 0.10 stays: it is a real taakveld, and the reservemutaties toggle
-                # decides per request whether it is drawn.
-                if code != _rol_taakveld_op(code) or not titel or code == d.TAAKVELD_RESULTAAT:
+                # 0.11 is kept, though _AGGREGATE drops its lasten: the Lasten detail page for
+                # hoofdtaakveld 0 draws those off their own column and needs a name for the slice,
+                # as the report does. 0.10 is kept for a plainer reason — it is a real taakveld,
+                # and the reservemutaties toggle decides per request whether it is drawn.
+                if code != _rol_taakveld_op(code) or not titel:
                     continue
                 namen[code] = titel
             per_jaar_namen[jaar] = namen
@@ -389,6 +431,8 @@ class Command(BaseCommand):
                     lasten_per_taakveld={},
                     lasten_per_hoofdtaakveld_categorie={},
                     reserve_lasten_per_hoofdcategorie={},
+                    resultaat_lasten_per_hoofdcategorie={},
+                    naamloze_lasten_per_hoofdcategorie={},
                 )
             _accumulate(row, categorie, code, bedrag or 0.0)
 
@@ -397,6 +441,8 @@ class Command(BaseCommand):
         # reads as "no figure".
         if verslagsoort.endswith(d.VERSLAGSOORT_JAARREKENING):
             self._sync_balans(jaar, verslagsoort, summaries)
+
+        self._sync_resultaat(jaar, verslagsoort, summaries)
 
         with transaction.atomic():
             Iv3Summary.objects.filter(jaar=jaar, verslagsoort=verslagsoort).delete()
@@ -451,6 +497,34 @@ class Command(BaseCommand):
                 self.style.ERROR(
                     f"  {vreemd} gemeenten met een balans maar zonder exploitatie"
                 )
+            )
+
+    def _sync_resultaat(
+        self, jaar: int, verslagsoort: str, summaries: dict[str, Iv3Summary]
+    ) -> None:
+        """Read taakveld 0.11's lasten onto the rows _AGGREGATE has already built.
+
+        Onto existing rows only, as the balans pass does: a gemeente that filed nothing but a
+        resultaat has no exploitatie to put it beside and nothing the Lasten pages could draw.
+        """
+        with connections["iv3"].cursor() as cursor:
+            cursor.execute(
+                _RESULTAAT,
+                {
+                    "jaar": jaar,
+                    "verslagsoort": verslagsoort,
+                    "resultaat": d.TAAKVELD_RESULTAAT,
+                },
+            )
+            rijen = cursor.fetchall()
+
+        for gm_code, hoofdcategorie, bedrag in rijen:
+            row = summaries.get(gm_code)
+            if row is None:
+                continue
+            row.resultaat_lasten_per_hoofdcategorie[hoofdcategorie] = (
+                row.resultaat_lasten_per_hoofdcategorie.get(hoofdcategorie, 0.0)
+                + (bedrag or 0.0)
             )
 
 
@@ -570,6 +644,12 @@ def _accumulate(row: Iv3Summary, categorie: str, code: str, bedrag: float):
         # of them exactly once — which is the invariant _lasten_gaan_op checks.
         taakveld = _rol_taakveld_op(code)
         row.lasten_per_taakveld[taakveld] = row.lasten_per_taakveld.get(taakveld, 0.0) + bedrag
+        # The rolled-up code, not the raw one: TAAKVELD_LABELS_ZONDER_BRON names the stems
+        # (6.73, 6.75, …) that _rol_taakveld_op collects 6.73a and 6.751 into.
+        if taakveld in d.TAAKVELD_LABELS_ZONDER_BRON:
+            row.naamloze_lasten_per_hoofdcategorie[hoofdcategorie] = (
+                row.naamloze_lasten_per_hoofdcategorie.get(hoofdcategorie, 0.0) + bedrag
+            )
         per_categorie = row.lasten_per_hoofdtaakveld_categorie.setdefault(hoofdtaakveld, {})
         per_categorie[hoofdcategorie] = per_categorie.get(hoofdcategorie, 0.0) + bedrag
     elif soort == "B":

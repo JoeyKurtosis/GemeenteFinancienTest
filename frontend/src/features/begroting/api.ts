@@ -14,6 +14,11 @@ export interface VerdelingPayload {
     /** Labels come from the backend, where they sit next to the IV3 codes they describe. */
     series: { key: string; name: string }[];
     data: Record<string, string | number | null>[];
+    /**
+     * The total for each row of `data`, measured and rounded once rather than summed from the
+     * rounded segments — the two differ by a euro often enough to see. See queries._bronnen.
+     */
+    totalen?: number[];
 }
 
 /** Euros per inhabitant; `null` when the cohort has no inhabitants behind it. */

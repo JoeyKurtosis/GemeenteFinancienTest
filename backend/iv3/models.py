@@ -82,6 +82,11 @@ class Iv3Summary(models.Model):
     inwoners = models.IntegerField(null=True)
 
     # Totals, excluding the reservemutaties taakveld.
+    #
+    # Taakveld 0.11 Resultaat is in `baten` and out of `lasten` — not an oversight but the
+    # report's own asymmetry, reproduced. See definitions.TAAKVELD_RESULTAAT. One consequence
+    # worth knowing before reading a saldo off these two: they no longer close against each
+    # other, so `baten - lasten` carries 0.11 as well as the real resultaat.
     lasten = models.FloatField(default=0)
     baten = models.FloatField(default=0)
 
@@ -201,6 +206,38 @@ class Iv3Summary(models.Model):
     # reserve_baten_per_hoofdcategorie. 0.10 is itself a taakveld of hoofdtaakveld 0, which is
     # where the toggle folds it back to.
     reserve_lasten_per_hoofdcategorie = models.JSONField(default=dict)
+
+    # The lasten booked on taakveld 0.11 Resultaat, per hoofdcategorie ("1".."7").
+    #
+    # Kept out of `lasten` and out of every breakdown beside it, because 0.11 is the saldo *of*
+    # the rows those add up — counting it there would add a gemeente's begrotingsresultaat to its
+    # spending. The Lasten pages draw it anyway, on their own, because the report does: its donut
+    # reads EUR 823 per inwoner on hoofdtaakveld 0 for the 2024 Begroting referentiegroep where
+    # the exploitatie alone is 801, and its trend runs 6 to 18 euro above the Begroting page's for
+    # the same cohort and years. Per hoofdcategorie because the Lasten kostensoort bar needs to
+    # place it; it lands almost entirely in 7.
+    #
+    # The lasten half only, and deliberately so: 0.11's *baten* are not held apart here but left
+    # in `baten` where the report counts them. See definitions.TAAKVELD_RESULTAAT.
+    #
+    # Zero for most gemeenten — 212 of 341 booked anything here in the 2023 Begroting.
+    resultaat_lasten_per_hoofdcategorie = models.JSONField(default=dict)
+
+    # The lasten on the taakvelden the source never names — definitions.TAAKVELD_LABELS_ZONDER_BRON,
+    # the jeugdhulp codes 6.73 through 6.79 — split by hoofdcategorie ("1".."7"). All of
+    # hoofdtaakveld 6, and already counted in per_hoofdtaakveld["6"] and in lasten_per_taakveld;
+    # this is the same money singled out.
+    #
+    # The Begroting page draws the total as its own "(Leeg)" segment, as the report does, which
+    # means subtracting it from the sociaal domein. Per hoofdcategorie rather than as one figure
+    # because the Lasten detail page needs to take it back out of its kostensoort bar as well, and
+    # that bar splits hoofdcategorie 3 from the rest — a single total cannot say how much of it
+    # was goederen en diensten.
+    #
+    # Could be read out of lasten_per_taakveld instead, were that column carrying a categorie
+    # split, which it is not; and the pages that need this read neither of the two big lasten
+    # breakdowns anyway. Seven small keys against ~800 bytes of JSON on every row.
+    naamloze_lasten_per_hoofdcategorie = models.JSONField(default=dict)
 
     class Meta:
         constraints = [
