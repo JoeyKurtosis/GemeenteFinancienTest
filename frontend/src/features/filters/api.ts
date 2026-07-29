@@ -33,6 +33,14 @@ export interface FilterOptions {
     /** The provinces that have a municipality in this year. */
     provincies: FilterOption[];
     verslagsoorten: FilterOption[];
+    /**
+     * The verslagsoorten of *every* year, keyed by year as a string.
+     *
+     * The rest of this payload describes the applied year; this one alone covers them all,
+     * so the sidebar can answer "does the year the user just picked have a Jaarrekening?"
+     * without waiting for Toepassen and a refetch. Cheap enough to always send.
+     */
+    verslagsoortenPerJaar: Record<string, FilterOption[]>;
 }
 
 /**

@@ -311,6 +311,22 @@ def _bedrag(bedrag: float, inwoners) -> dict:
     return {"totaal": _euro(bedrag), "per_inwoner": _per_inwoner(bedrag, inwoners)}
 
 
+def _ingediend(queryset):
+    """Drop the gemeenten that filed nothing at all for this report.
+
+    queries._filter_niet_indieners' rule, and it has to stay that rule: a figure the assistant
+    quotes and the same figure on the dashboard page it points at must agree. A gemeente that
+    did not file keeps a summary row with every amount at zero — the sync resolves the -99998
+    "geen opgave" sentinel to 0 — and counting that as a gemeente spending nothing moves both
+    the mean and, worse, the "laagste" ranglijst, where it lands at number one looking like a
+    finding.
+
+    In SQL rather than in Python because every query here is a .values() on a narrow column
+    list: testing lasten and baten in Python would mean dragging both into all of them.
+    """
+    return queryset.exclude(lasten=0, baten=0)
+
+
 def _gemiddelde(rows, meet, per_inwoner: bool) -> float | None:
     """The equal-weight mean across a bundle of rows — one gemeente, one vote.
 
@@ -405,7 +421,9 @@ def _landelijk_per_inwoner(jaar: int, verslagsoort: str, metrieken) -> dict:
     """The national equal-weight mean per inhabitant, for a couple of metrics."""
     velden = sorted({veld for metriek in metrieken for veld in METRIEKEN[metriek][0]})
     rows = list(
-        Iv3Summary.objects.filter(jaar=jaar, verslagsoort=verslagsoort).values("inwoners", *velden)
+        _ingediend(
+            Iv3Summary.objects.filter(jaar=jaar, verslagsoort=verslagsoort)
+        ).values("inwoners", *velden)
     )
     return {
         metriek: _gemiddelde(rows, METRIEKEN[metriek][1], per_inwoner=True)
@@ -554,8 +572,8 @@ def vergelijk_gemeenten(gemeenten, jaar, metrieken=None, verslagsoort=None) -> d
 
     rows = {
         row["gm_code"]: row
-        for row in Iv3Summary.objects.filter(
-            jaar=jaar, verslagsoort=code, gm_code__in=list(codes)
+        for row in _ingediend(
+            Iv3Summary.objects.filter(jaar=jaar, verslagsoort=code, gm_code__in=list(codes))
         ).values("gm_code", "inwoners", *velden)
     }
 
@@ -638,7 +656,9 @@ def ranglijst(
     per_inwoner = per_inwoner is not False
 
     rows = list(
-        Iv3Summary.objects.filter(jaar=jaar, verslagsoort=code).values("gm_code", "inwoners", *velden)
+        _ingediend(Iv3Summary.objects.filter(jaar=jaar, verslagsoort=code)).values(
+            "gm_code", "inwoners", *velden
+        )
     )
     _, namen = _namen_index(jaar)
 

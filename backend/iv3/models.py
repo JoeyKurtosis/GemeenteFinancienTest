@@ -150,9 +150,25 @@ class Iv3Summary(models.Model):
     # and the older pages genuinely disagree on the leges, see that constant.
     baten_heffingen_per_categorie = models.JSONField(default=dict)
 
+    # The same heffingen, cut the other way: by taakveld code ("0.61", "7.2") instead of by
+    # categorie. That is the cut the Lokale heffingen bar reads, because what a heffing *is*
+    # sits in its taakveld and not in its categorie — riolering is booked under B2.2.2, B2.2.1
+    # and B3.7 alike, and all three of those are the rioolheffing. See BATEN_HEFFINGEN_TAAKVELDEN.
+    baten_heffingen_per_taakveld = models.JSONField(default=dict)
+
     # Everything left of baten once the heffingen and the rijk are taken out, per
     # hoofdcategorie ("1".."7").
     overige_baten_per_hoofdcategorie = models.JSONField(default=dict)
+
+    # Three of those same overige baten again, at full categorie rather than hoofdcategorie:
+    # B3.1 Grond, B3.3 Pachten, B3.6 Huren. The Overige inkomsten bar names grondverkopen and
+    # huren separately, and hoofdcategorie 3 lumps them in with everything else bought and sold.
+    #
+    # Deliberately these three and not every baten categorie: a row already carries ~2KB of JSON
+    # and the other thirty-odd codes answer no question the dashboard asks. The bar's two
+    # remaining named slices need no column at all — bijdragen uit reserves is `reserve_baten`
+    # and rente/dividenden is hoofdcategorie 5 above.
+    overige_baten_grond_huren = models.JSONField(default=dict)
 
     # The reservemutaties taakveld's baten per hoofdcategorie, kept apart for the same reason
     # reserve_baten is: the toggle folds it in per request. It rides with the residual, since

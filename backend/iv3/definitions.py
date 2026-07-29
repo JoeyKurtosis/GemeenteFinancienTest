@@ -161,13 +161,32 @@ BALANS_PASSIVA_PREFIX = "^P"
 # `min` is inclusive and `max` exclusive; null is unbounded on that side. G4 is picked by
 # code instead, and overlaps "> 100.000" on purpose — the four big cities are also large,
 # and are drawn as their own line because they behave nothing like the rest of that group.
+#
+# The bounds are the report's, read off gemeenten[Inwonergroep] in the .pbix:
+#
+#   SWITCH(TRUE(), Inwoneraantal <  25000, "<25k",
+#                  Inwoneraantal <=  50000, "25k - 50k",
+#                  Inwoneraantal <= 100000, "50k - 100k",
+#                  Inwoneraantal <= 300000, ">100k",
+#                                           "G4")
+#
+# Note the asymmetry, which is the report's and not a typo here: the first cut is exclusive and
+# every later one inclusive, so a gemeente of exactly 50.000 is in "25.000 – 50.000" and one of
+# exactly 100.000 is in "50.000 – 100.000". That reads the way the labels do, which the earlier
+# all-exclusive bounds did not — they put exactly 100.000 inhabitants in "> 100.000". Expressed
+# below as exclusive maxima, hence the +1.
+#
+# G4 is the report's residual class, everything above 300.000. Kept as four codes rather than a
+# size bound because that is what the class means, but the two only agree while no fifth city
+# passes 300.000 — Eindhoven, the next largest, is around 250.000. If one does, the report would
+# have moved it into G4 automatically and this will not.
 G4_GM_CODES = ("GM0363", "GM0599", "GM0518", "GM0344")  # Amsterdam, Rotterdam, Den Haag, Utrecht
 
 INWONERGROEPEN = [
     {"id": "lt25", "label": "< 25.000", "min": None, "max": 25_000},
-    {"id": "25tot50", "label": "25.000 – 50.000", "min": 25_000, "max": 50_000},
-    {"id": "50tot100", "label": "50.000 – 100.000", "min": 50_000, "max": 100_000},
-    {"id": "gt100", "label": "> 100.000", "min": 100_000, "max": None},
+    {"id": "25tot50", "label": "25.000 – 50.000", "min": 25_000, "max": 50_001},
+    {"id": "50tot100", "label": "50.000 – 100.000", "min": 50_001, "max": 100_001},
+    {"id": "gt100", "label": "> 100.000", "min": 100_001, "max": None},
     {"id": "g4", "label": "G4", "gm_codes": G4_GM_CODES},
 ]
 
@@ -233,6 +252,42 @@ BATEN_HEFFINGEN_LABELS = {
     "B2.2.2": "2.2.2 Belastingen op huishoudens",
     "B3.7": "3.7 Leges en andere rechten",
 }
+
+# The same heffingen by taakveld, which is the cut that says what a heffing *is* — the
+# categorie above only says who was taxed and under which heading it was booked.
+#
+# The mapping is the report's, and every code was read off the warehouse's own taakveld labels
+# rather than assumed (jaar 2024, verslagsoort 2024X005). Two taakvelden make one OZB because
+# the report draws one bar for it; woningen and niet-woningen are the same tax.
+#
+# Note this cuts *across* the three heffingen categorieën. Riolering carries EUR 1,60 mrd under
+# B2.2.2, EUR 386 mln under B2.2.1 and EUR 7 mln under B3.7, and all of it is the rioolheffing —
+# which is exactly why this cannot be derived from baten_heffingen_per_categorie.
+BATEN_HEFFINGEN_TAAKVELDEN = {
+    "0.61": "Onroerendezaakbelasting",  # OZB woningen
+    "0.62": "Onroerendezaakbelasting",  # OZB niet-woningen
+    "0.63": "Parkeerbelasting",
+    "7.2": "Rioolheffing",
+    "7.3": "Afvalheffing",
+}
+
+# Everything not in BATEN_HEFFINGEN_TAAKVELDEN: bouwleges on 8.3, burgerzaken on 0.2, and a long
+# tail besides. A residual rather than a list, so the bar's segments always sum to its total.
+BATEN_HEFFINGEN_OVERIG_LABEL = "Overige belastingen en leges"
+
+# The two overige-baten categorieën the Overige inkomsten bar names, and their CBS labels
+# (Vraagbaak IV3 Gemeenten: 3.1 Grond, 3.3 Pachten, 3.6 Huren). Pachten and huren are drawn as
+# one slice, as the report draws them.
+CATEGORIE_BATEN_GROND = "B3.1"
+CATEGORIEEN_BATEN_HUREN_PACHTEN = ("B3.6", "B3.3")
+CATEGORIEEN_BATEN_GROND_HUREN = (CATEGORIE_BATEN_GROND, *CATEGORIEEN_BATEN_HUREN_PACHTEN)
+
+# The two hoofdcategorieën the Overige inkomsten bar names whole, rather than by categorie.
+# B7.1 sits almost entirely on taakveld 0.10 (EUR 8,69 mrd of 8,72 mrd in the 2024 Jaarrekening),
+# which is what makes hoofdcategorie 7 readable as "bijdragen uit reserves"; B5.1 en B5.2 are
+# rente and dividenden and sit on 0.5 Treasury.
+HOOFDCATEGORIE_RESERVES = "7"
+HOOFDCATEGORIE_RENTE = "5"
 
 # The hoofdcategorieën the Overige inkomsten donut splits into: HOOFDCATEGORIE_LABELS without
 # the salarissen. A gemeente is not paid a salary — 1 is a cost categorie, and it never occurs
@@ -306,10 +361,26 @@ HOOFDTAAKVELD_LABELS = {
 # CBS series. Both are annual averages, and both get re-based to the first year on the
 # chart before they are drawn — the absolute base below does not matter, only the ratios.
 #
-# UNVERIFIED: these figures were entered from memory and have not been checked against
-# StatLine. They are the right order of magnitude and carry the right shape (the 2022
-# energy spike is there), but treat them as placeholders until someone downloads the
-# tables. Everything else in this module was validated against the warehouse; this was not.
+# These figures were entered from memory rather than downloaded. Neither has been checked
+# against StatLine itself, but both now have a second opinion: the .pbix carried an embedded
+# `Inflatie CBS` table, and rebasing the two series below to 2018 = 100 puts them beside it as
+#
+#              2019     2020     2021     2022     2023
+#   CPI here  102,71   104,06   106,87   117,80   122,44
+#   report    102,60   103,93   106,74   117,41   121,88   <- within 0,6 index points
+#
+#   CAO here  102,60   104,17   106,35   109,69   116,25
+#   report    102,40   104,86   107,29   109,44   110,97   <- 5,3 apart by 2023
+#
+# So CPI_PER_JAAR is corroborated — two independent sources agreeing to within half a point,
+# 2022 energy spike and all. Treat it as sound rather than provisional.
+#
+# CAO_LONEN_PER_JAAR is a deliberate divergence, not an error. The report's "inkomensinflatie"
+# is a smooth ~2%/jaar series that never sees the 2023 wage round; real CAO-lonen rose about 6%
+# that year, which is the whole point of laying this over the personeelskosten. The old
+# dashboard's personeel index therefore cannot be reproduced from here, and should not be —
+# and unlike the report's series, which stops at 2023, this one covers the years the dashboard
+# actually draws. Still worth replacing with a downloaded 85995NED when someone has the time.
 #
 # Consumentenprijsindex, 2015 = 100. CBS StatLine 83131NED.
 CPI_PER_JAAR = {

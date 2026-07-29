@@ -48,10 +48,20 @@ const withAllesRow = (options: FilterOption[], selected: Selection, onChange: (k
 };
 
 /** Route prefixes where the "Reservemutaties" toggle is relevant (matches sub-routes too). */
-const reservemutatiesRoutes = ["/begroting", "/baten", "/lasten", "/gemeentelijkestand"];
+const reservemutatiesRoutes = ["/begroting", "/baten", "/lasten", "/gemeentelijkestand", "/managementoverzicht"];
 
 /** Route prefixes where the "Verslagsoort" filter is relevant (matches sub-routes too). */
-const verslagsoortRoutes = ["/gemeentelijkestand", "/benchmark", "/baten"];
+const verslagsoortRoutes = ["/gemeentelijkestand", "/benchmark", "/baten", "/managementoverzicht"];
+
+/**
+ * Routes where "Verslagsoort" applies to the index page and *not* to its sub-routes.
+ *
+ * /begroting alone: its overzicht tab is drawn from one report like every other page, but the
+ * two begroting-vs-jaarrekening tabs put both verslagsoorten on the category axis and compare
+ * them against each other. Picking one there answers nothing — queries.begroting sends those
+ * two down _begroting_per_verslagsoort, which never reads the selected code.
+ */
+const verslagsoortIndexRoutes = ["/begroting"];
 
 export interface SidebarFiltersState {
     selectedGemeente: Key | null;
@@ -101,13 +111,23 @@ export const SidebarFilters = ({
     onApply,
 }: SidebarFiltersProps) => {
     const { pathname } = useLocation();
-    const { options, isLoading, reset, apply, hasPendingChanges } = useFilters();
+    const { options, draftVerslagsoorten, isLoading, reset, apply, hasPendingChanges } = useFilters();
 
     // The one route whose filters read differently — see the component docstring.
     const isGemeentelijkeStand = pathname === "/gemeentelijkestand" || pathname.startsWith("/gemeentelijkestand/");
 
     const showReservemutaties = reservemutatiesRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`));
-    const showVerslagsoort = verslagsoortRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+    // Only where there is a choice to make. A year carries a Jaarrekening once it has been
+    // filed, so the newest year or two hold nothing but a Begroting — and a dropdown with one
+    // option is a control that cannot do anything. Counted off the options rather than tested
+    // for the "005" suffix, so this stays a statement about having something to pick.
+    //
+    // Off the *draft* year, not the applied one: picking 2024 in the select beside this has to
+    // reveal the choice immediately, not after a Toepassen and a second trip into this menu.
+    const opVerslagsoortRoute =
+        verslagsoortRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`)) ||
+        verslagsoortIndexRoutes.some((route) => pathname === route || pathname === `${route}/`);
+    const showVerslagsoort = draftVerslagsoorten.length > 1 && opVerslagsoortRoute;
 
     const jaren = options.jaren.map((jaar) => ({ id: String(jaar), label: String(jaar) }));
 
@@ -176,7 +196,7 @@ export const SidebarFilters = ({
                     placeholder="Selecteer verslagsoort"
                     size="sm"
                     isDisabled={isLoading}
-                    items={options.verslagsoorten}
+                    items={draftVerslagsoorten}
                     selectedKey={selectedVerslagsoort}
                     onSelectionChange={onVerslagsoortChange}
                 >

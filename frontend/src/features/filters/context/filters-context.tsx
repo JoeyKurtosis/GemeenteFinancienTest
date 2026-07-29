@@ -1,7 +1,7 @@
 import { type ReactNode, createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import type { Key, Selection } from "react-aria-components";
-import { type FilterOptions, fetchFilterOptions } from "../api";
+import { type FilterOption, type FilterOptions, fetchFilterOptions } from "../api";
 import { ALLE_SELECTIE, type FiltersSearch, GEEN_SELECTIE, isSentinelSelectie, parseCodes, serializeCodes, serializeSelectie } from "../search";
 
 const EMPTY_OPTIONS: FilterOptions = {
@@ -9,12 +9,33 @@ const EMPTY_OPTIONS: FilterOptions = {
     jaar: null,
     gemeenten: [],
     verslagsoorten: [],
+    verslagsoortenPerJaar: {},
     inwonergroepen: [],
     provincies: [],
 };
 
 /** Last three characters of a Begroting code, e.g. "2024X000" — the default verslagsoort. */
 const BEGROTING_SUFFIX = "000";
+
+/**
+ * The code in `opties` that best answers a selection of `huidig`, or undefined when there is
+ * nothing to point at.
+ *
+ * A verslagsoort code carries its year ("2024X000"), so moving between years means re-pointing
+ * the selection rather than keeping or dropping it. Same soort where the new year has one —
+ * a user reading Jaarrekeningen stays on Jaarrekeningen — and a Begroting otherwise, that
+ * being the one every year carries.
+ *
+ * Used twice, and it has to be the same rule both times: the corrections pass re-points the
+ * *applied* verslagsoort in the URL, and onJaarChange re-points the *draft* one so the sidebar
+ * already shows what applying would land on.
+ */
+const herpuntVerslagsoort = (opties: FilterOption[], huidig?: string): string | undefined => {
+    if (opties.length === 0) return undefined;
+    const zelfdeSoort = huidig ? opties.find((optie) => optie.id.endsWith(huidig.slice(-3))) : undefined;
+    const begroting = opties.find((optie) => optie.id.endsWith(BEGROTING_SUFFIX));
+    return (zelfdeSoort ?? begroting ?? opties[0]).id;
+};
 
 /**
  * The view the dashboard opens on, and the one Reset returns to. GM1680 is Aa en Hunze.
@@ -73,6 +94,12 @@ interface FiltersContextValue {
     /** Each selected size class is drawn as a line of its own on the charts. */
     selectedInwonergroepen: Selection;
     onInwonergroepenChange: (keys: Selection) => void;
+    /**
+     * The verslagsoorten of the *draft* year — what the sidebar's select must offer, and how
+     * it knows whether that year has a Jaarrekening at all. `options.verslagsoorten` is the
+     * applied year's and belongs to the corrections pass; do not use it to render the select.
+     */
+    draftVerslagsoorten: FilterOption[];
     selectedVerslagsoort: Key | null;
     onVerslagsoortChange: (key: Key | null) => void;
     selectedJaar: Key | null;
@@ -234,10 +261,9 @@ export const FiltersProvider = ({ children }: { children: ReactNode }) => {
         // re-pointed at the new year rather than simply dropped. Missing or unavailable
         // falls back to Begroting, which every year has.
         const heeftVerslagsoort = verslagsoort && options.verslagsoorten.some((option) => option.id === verslagsoort);
-        if (!heeftVerslagsoort && options.verslagsoorten.length > 0) {
-            const zelfdeSoort = verslagsoort ? options.verslagsoorten.find((option) => option.id.endsWith(verslagsoort.slice(-3))) : undefined;
-            const begroting = options.verslagsoorten.find((option) => option.id.endsWith(BEGROTING_SUFFIX));
-            patch.verslagsoort = (zelfdeSoort ?? begroting ?? options.verslagsoorten[0]).id;
+        if (!heeftVerslagsoort) {
+            const herpunt = herpuntVerslagsoort(options.verslagsoorten, verslagsoort);
+            if (herpunt) patch.verslagsoort = herpunt;
         }
 
         // Neither sentinel names codes — "alle" follows the year and "geen" is empty on
@@ -301,6 +327,18 @@ export const FiltersProvider = ({ children }: { children: ReactNode }) => {
         setDraft((current) => ({ ...current, ...patch }));
     }, []);
 
+    // What the sidebar's Verslagsoort select offers: the *draft* year's verslagsoorten, so
+    // picking a year that has a Jaarrekening reveals the choice there and then rather than one
+    // Toepassen later. `options.verslagsoorten` stays the applied year's and is what the
+    // corrections pass prunes the URL against — the two must not be crossed.
+    //
+    // Falls back to the applied year's list while the per-year map is still empty (options not
+    // loaded, or a failed /filters/), which is the same list the select showed before.
+    const draftVerslagsoorten = useMemo(
+        () => options.verslagsoortenPerJaar[String(draft.jaar)] ?? options.verslagsoorten,
+        [options.verslagsoortenPerJaar, options.verslagsoorten, draft.jaar],
+    );
+
     const value: FiltersContextValue = {
         options,
         isLoading,
@@ -319,11 +357,23 @@ export const FiltersProvider = ({ children }: { children: ReactNode }) => {
         selectedInwonergroepen: toSelection(draft.inwoner),
         onInwonergroepenChange: (keys) => setDraftValue({ inwoner: serializeSelectie(keys, options.inwonergroepen) }),
 
+        draftVerslagsoorten,
         selectedVerslagsoort: draft.verslagsoort ?? null,
         onVerslagsoortChange: (key) => setDraftValue({ verslagsoort: key ? String(key) : undefined }),
 
         selectedJaar: draft.jaar ? String(draft.jaar) : null,
-        onJaarChange: (key) => setDraftValue({ jaar: key ? Number(key) : undefined }),
+        // The verslagsoort moves with the year, in the draft as well as in the URL. Without it
+        // the select would sit on a code belonging to the year the user just left — unmatched by
+        // any of its items, so blank — and the corrections pass would only sort that out one
+        // Toepassen later. Same rule the corrections pass applies; see herpuntVerslagsoort.
+        onJaarChange: (key) => {
+            const nieuwJaar = key ? Number(key) : undefined;
+            const opties = nieuwJaar ? (options.verslagsoortenPerJaar[String(nieuwJaar)] ?? []) : [];
+            setDraftValue({
+                jaar: nieuwJaar,
+                verslagsoort: herpuntVerslagsoort(opties, draft.verslagsoort) ?? draft.verslagsoort,
+            });
+        },
 
         reservemutaties: resolveReserve(draft.reserve),
         // Written out either way: with the default on, dropping `false` from the URL would

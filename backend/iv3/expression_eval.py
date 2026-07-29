@@ -141,9 +141,27 @@ def compile_expression(expr: str):
     """
     tree = ast.parse(expr.strip(), mode="eval")
 
+    # Only the names the formula actually mentions, resolved once here rather than on every row.
+    #
+    # Reading all of ALLOWED_FIELDS instead was quietly expensive: the year loops in queries.py
+    # narrow their querysets with .only(), so a field outside a page's tuple is deferred and
+    # touching it costs one SELECT *per row*. With referentie=alle that is five deferred columns
+    # over ~342 gemeenten over seven years — the Managementoverzicht measured 87 queries with the
+    # fallback lambdas against more than 9.000 through here. Formulas name two or three fields;
+    # the other thirteen were being fetched for nothing.
+    #
+    # Intersected with ALLOWED_FIELDS so an unknown name still resolves to 0.0 exactly as it did,
+    # rather than raising where it used to be silently absent. validate_expression rejects those
+    # on save; this is the belt to that pair of braces.
+    namen = tuple(
+        node.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Name) and node.id in ALLOWED_FIELDS
+    )
+
     def evaluate(row) -> float:
         fields = {}
-        for name in ALLOWED_FIELDS:
+        for name in namen:
             val = getattr(row, name, 0) or 0
             fields[name] = float(val)
         try:

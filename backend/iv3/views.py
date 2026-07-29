@@ -18,6 +18,13 @@ class FilterOptionsView(APIView):
     Gemeenten and verslagsoorten both depend on the year — municipalities merge, and a
     year only carries a Jaarrekening once it has been filed — so the client refetches
     this when the year changes.
+
+    `verslagsoortenPerJaar` is the exception, and carries every year at once. The sidebar has
+    to answer "does this year have a Jaarrekening?" for the year the user is *pointing at*,
+    before they press Toepassen and before anything has been refetched — otherwise the
+    Verslagsoort select only appears one apply too late. It is a few dozen bytes against a
+    round trip per dropdown, and the gemeenten list, which is the expensive part of this
+    payload, still follows the applied year.
     """
 
     # The dashboard is public; DRF defaults to IsAuthenticated.
@@ -28,7 +35,12 @@ class FilterOptionsView(APIView):
         jaren = sorted(per_jaar, reverse=True)
 
         if not jaren:
-            return Response({"jaren": [], "jaar": None, "gemeenten": [], "verslagsoorten": [], "inwonergroepen": [], "provincies": []})
+            return Response(
+                {
+                    "jaren": [], "jaar": None, "gemeenten": [], "verslagsoorten": [],
+                    "verslagsoortenPerJaar": {}, "inwonergroepen": [], "provincies": [],
+                }
+            )
 
         try:
             jaar = int(request.query_params.get("jaar", ""))
@@ -43,6 +55,10 @@ class FilterOptionsView(APIView):
                 "jaar": jaar,
                 "gemeenten": queries.gemeente_options(jaar),
                 "verslagsoorten": queries.verslagsoort_options(per_jaar[jaar]),
+                "verslagsoortenPerJaar": {
+                    str(elk_jaar): queries.verslagsoort_options(codes)
+                    for elk_jaar, codes in per_jaar.items()
+                },
                 "inwonergroepen": queries.inwonergroep_options(),
                 "provincies": queries.provincie_options(jaar),
             }

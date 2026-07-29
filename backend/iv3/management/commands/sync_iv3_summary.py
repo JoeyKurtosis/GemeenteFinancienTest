@@ -87,6 +87,14 @@ ORDER BY 1
 # `bedrag` resolves the sentinel before anything sums it (definitions.GEEN_OPGAVE).
 # 2eplaatsing is the revised figure and the better populated of the two, so it wins
 # wherever CBS has published it.
+#
+# The `ELSE 0` cannot tell "reported nothing" from "reported a zero", so a gemeente that filed
+# no return at all still gets a summary row, with every amount at zero and its population
+# intact. In a mean of euro-per-inhabitant ratios that reads as a gemeente spending nothing,
+# which is why queries._filter_niet_indieners drops those rows on the way out. Twenty-five of
+# the ~6.400 rows are like this. Fixing it here instead would mean writing no row at all, which
+# is a defensible shape but needs the warehouse and a regenerated fixture to land — the
+# query-side filter needs neither and reaches the data already shipped.
 _AGGREGATE = f"""
 WITH feiten AS (
     SELECT
@@ -374,7 +382,9 @@ class Command(BaseCommand):
                     personeel_per_hoofdtaakveld={},
                     spuks_per_hoofdtaakveld={},
                     baten_heffingen_per_categorie={},
+                    baten_heffingen_per_taakveld={},
                     overige_baten_per_hoofdcategorie={},
+                    overige_baten_grond_huren={},
                     reserve_baten_per_hoofdcategorie={},
                     lasten_per_taakveld={},
                     lasten_per_hoofdtaakveld_categorie={},
@@ -395,6 +405,16 @@ class Command(BaseCommand):
         scheef = sum(
             not (_baten_gaan_op(row) and _lasten_gaan_op(row)) for row in summaries.values()
         )
+
+        # Loud, because an empty column here is invisible on the page: the bar keeps its total and
+        # simply moves the money into its residual. See _mapping_leeft.
+        dood = _mapping_leeft(summaries.values())
+        if dood:
+            self.stderr.write(
+                f"  {verslagsoort}: geen enkele gemeente boekte op {', '.join(dood)} "
+                f"— controleer BATEN_HEFFINGEN_TAAKVELDEN / CATEGORIEEN_BATEN_GROND_HUREN"
+            )
+
         return len(summaries), scheef
 
     def _sync_balans(
@@ -480,6 +500,32 @@ def _baten_gaan_op(row: Iv3Summary) -> bool:
     return abs(row.baten - bronnen) < 0.01
 
 
+def _mapping_leeft(rows) -> list[str]:
+    """The named heffingen and grond/huren codes that raised nothing at all this report.
+
+    A check on the *mapping*, not on the money, and deliberately taken over the country rather
+    than per gemeente. BATEN_HEFFINGEN_TAAKVELDEN and CATEGORIEEN_BATEN_GROND_HUREN name codes by
+    hand — CBS renumbering one of them, or a label drifting, would empty a column silently and the
+    Lokale heffingen bar would quietly draw the rioolheffing at zero and put it in the residual
+    instead. No individual gemeente has to levy a parkeerbelasting; all 342 of them together do.
+
+    Deliberately not a per-row subset assertion. The finer cut is a subset of the coarser one by
+    construction — _accumulate only ever adds to it having just added the same bedrag to the other
+    — but comparing their *sums* is not sign-safe: hoofdcategorie 3 comes out net negative for a
+    gemeente writing down a grondexploitatie (one 2020 Jaarrekening reaches EUR -61,6 mln), which
+    would fail such a check on 35 rows without anything being wrong. Those negative segments are
+    real and the charts have always drawn them.
+    """
+    dood = []
+    for code, label in d.BATEN_HEFFINGEN_TAAKVELDEN.items():
+        if not any(row.baten_heffingen_per_taakveld.get(code) for row in rows):
+            dood.append(f"{code} ({label})")
+    for categorie in d.CATEGORIEEN_BATEN_GROND_HUREN:
+        if not any(row.overige_baten_grond_huren.get(categorie) for row in rows):
+            dood.append(categorie)
+    return dood
+
+
 def _accumulate(row: Iv3Summary, categorie: str, code: str, bedrag: float):
     """Fold one (categorie, taakveld) bucket into the gemeente's summary row.
 
@@ -536,10 +582,25 @@ def _accumulate(row: Iv3Summary, categorie: str, code: str, bedrag: float):
             row.baten_heffingen_per_categorie[categorie] = (
                 row.baten_heffingen_per_categorie.get(categorie, 0.0) + bedrag
             )
+            # The same euros a second time, cut by taakveld instead of by categorie — what the
+            # heffing *is* rather than under which heading it was booked. Only the five taakvelden
+            # the bar names: the rest is drawn as a residual against the categorie total above, so
+            # storing it would be storing the same number twice. See BATEN_HEFFINGEN_TAAKVELDEN.
+            if code in d.BATEN_HEFFINGEN_TAAKVELDEN:
+                row.baten_heffingen_per_taakveld[code] = (
+                    row.baten_heffingen_per_taakveld.get(code, 0.0) + bedrag
+                )
         elif categorie != d.CATEGORIE_RIJK:
             row.overige_baten_per_hoofdcategorie[hoofdcategorie] = (
                 row.overige_baten_per_hoofdcategorie.get(hoofdcategorie, 0.0) + bedrag
             )
+            # And three of those again at full categorie, for the two slices the Overige
+            # inkomsten bar names that hoofdcategorie 3 would otherwise bury. A subset of the
+            # line above, not a partition of it — the bar's residual subtracts these back out.
+            if categorie in d.CATEGORIEEN_BATEN_GROND_HUREN:
+                row.overige_baten_grond_huren[categorie] = (
+                    row.overige_baten_grond_huren.get(categorie, 0.0) + bedrag
+                )
 
     if categorie in (d.CATEGORIE_SALARISSEN, d.CATEGORIE_INHUUR):
         # Personele lasten: payroll plus the staff hired in to do the same work. Kept per

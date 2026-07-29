@@ -145,6 +145,13 @@ def _inwonergroepen_voor(gm_code: str, inwoners: int | None) -> list[str]:
     A list rather than a single id: G4 overlaps "> 100.000" on purpose, so the four big
     cities are in two groups at once. Resolved server-side so the bounds stay here — the
     client filters by group id, exactly as inwonergroep_options() intends.
+
+    Classified on the *selected year's* population, which the report did not do: its sidebar
+    read dtGemeenten[Inwonergroep], built from CALCULATE(MAX(gemeenten[Inwoneraantal])) — each
+    gemeente's largest year, fixed for the whole timeline. So a gemeente that has since grown
+    past 25.000 was in "25.000 – 50.000" even in the years it was smaller. Per-year is the rule
+    the Gemeentelijke Stand charts already use (gemeenten[Inwonergroep] there *is* per year),
+    and one rule across the dashboard beats reproducing that asymmetry.
     """
     row = SimpleNamespace(gm_code=gm_code, inwoners=inwoners)
     return [groep["id"] for groep in get_settings().INWONERGROEPEN if _in_groep(row, groep)]
@@ -280,6 +287,10 @@ def _per_inwoner_mean(rows, measure) -> float | None:
     group. One row is one gemeente. A single-gemeente cohort collapses to that gemeente's
     own ratio, identical to the weighted figure.
 
+    One row is one gemeente *that filed*: a gemeente with no return at all would otherwise
+    weigh as heavily as any other while contributing a €0 ratio it never reported. Every
+    caller runs its rows through `_filter_niet_indieners` first.
+
     When the dashboard settings aggregation_method is "population_weighted", this
     delegates to _per_inwoner instead.
     """
@@ -342,26 +353,37 @@ def _in_groep(row, groep: dict, exclusief: bool = False) -> bool:
 def _saldo_pct(rows) -> float | None:
     """A cohort's saldo as a share of everything that flowed through it, in percent.
 
-    The mean of each gemeente's own (baten - lasten) / (baten + lasten), one row one
-    gemeente, matching the equal weighting of `_per_inwoner_mean`.
+    The report's "Gemiddeld Overschot of Tekort per Inwoner", copied from its DAX:
+
+        DIVIDE([Avg Bedrag per Inwonersgroep Baat pi] - [Avg Bedrag per Inwonersgroep Last pi],
+               [Avg Bedrag per Inwonersgroep Baat pi] + [Avg Bedrag per Inwonersgroep Last pi], 0)
+
+    A ratio *of* the two cohort averages — not the average of each gemeente's own ratio, which
+    is what this used to be. The two are different numbers, and the old shape was a guess: the
+    report was a live-connection thin file when this was written, so the DAX was not available
+    to copy and the figure was fitted to the rendered chart instead. The DAX has since been
+    recovered from the .pbix and is reproduced above.
+
+    Both averages are `_per_inwoner_mean`, so a large gemeente does not dominate its group and
+    the saldo stays consistent with the baten and lasten drawn beside it. Per inhabitant rather
+    than absolute because the ratio is taken *after* averaging: scaling each gemeente by its own
+    population changes the result, and the report scales.
 
     Reserve-free by construction: it reads the basis_* figures stashed before
     _apply_reservemutaties, because the report's chart carries a visual-level filter
     dropping taakveld 0.10 whatever the Reservemutaties toggle says.
 
-    The report is a live-connection thin file, so the DAX behind "Gemiddeld Overschot of
-    Tekort per Inwoner" was not available to copy and this was fitted to the rendered
-    chart instead. It tracks the G4 line to within ~0.06pp (2018: -3.37 against -3.43;
-    2022: -2.35 against -2.39) — close, but do not expect the second decimal to agree.
+    Keeps one decimal where the euro measures round to whole euros — this is a percentage, and
+    the report prints it as `0.0%`. DIVIDE's third argument is the 0 returned on a zero
+    denominator; an empty cohort stays blank.
     """
-    ratios = [
-        (row.basis_baten - row.basis_lasten) / (row.basis_baten + row.basis_lasten) * 100
-        for row in rows
-        if (row.basis_baten + row.basis_lasten)
-    ]
-    if not ratios:
+    baten = _per_inwoner_mean(rows, lambda row: row.basis_baten)
+    lasten = _per_inwoner_mean(rows, lambda row: row.basis_lasten)
+    if baten is None or lasten is None:
         return None
-    return _round(sum(ratios) / len(ratios))
+    if not (baten + lasten):
+        return 0.0
+    return round((baten - lasten) / (baten + lasten) * 100, 1)
 
 
 def _apply_reservemutaties(rows, baten_verdeling: bool = False, lasten_verdeling: bool = False):
@@ -415,6 +437,33 @@ def _apply_reservemutaties(rows, baten_verdeling: bool = False, lasten_verdeling
     return rows
 
 
+def _filter_niet_indieners(rows: list) -> list:
+    """Drop the gemeenten that filed nothing at all for this report.
+
+    A gemeente that did not file has warehouse rows carrying the -99998 "geen opgave"
+    sentinel, which the sync resolves to 0 before it sums anything — the CASE in
+    sync_iv3_summary._AGGREGATE. What survives is a summary row with every amount at zero
+    and an ordinary population, and in a mean of euro-per-inhabitant ratios that counts as
+    a gemeente spending €0. It is a missing return, not a zero: the Power BI report filtered
+    the geen-opgave rows out of its fact table, so such a gemeente never entered its
+    AVERAGEX at all.
+
+    The difference is real money. Managementoverzicht 2024X000 with referentie=alle draws
+    €3.646 per inwoner with Vijfheerenlanden's empty 2024 begroting counted as a zero, and
+    €3.657 — the old dashboard's figure — without it.
+
+    `lasten` and `baten` are the two totals every other metric is a subset of (bar the
+    reserve columns, which are zero on a non-filer too), so testing those two catches them
+    all. 25 of 6.398 rows are like this, and not one row in the table has exactly one of the
+    pair at zero, which makes the test unambiguous rather than a heuristic.
+
+    Emphatically not a per-metric zero filter of the kind Benchmark and Baten/Lasten apply: a
+    gemeente that books nothing on inhuur stays in as a real zero. One cohort per page
+    survives, and with it the identities between the pages.
+    """
+    return [row for row in rows if row.lasten or row.baten]
+
+
 def gemeentelijke_stand(
     jaar: int,
     verslagsoort: str,
@@ -464,7 +513,7 @@ def gemeentelijke_stand(
         # rows instead of the year's ~342, and a row here is ~2KB of JSON.
         if gemeenten:
             selectie = selectie.filter(gm_code__in=gemeenten)
-        rows = list(selectie.only(*STAND_VELDEN))
+        rows = _filter_niet_indieners(list(selectie.only(*STAND_VELDEN)))
         # Kept aside before the toggle folds 0.10 in, so _saldo_pct can stay reserve-free.
         for row in rows:
             row.basis_lasten = row.lasten
@@ -578,7 +627,18 @@ def _cohort_labels(jaar, gemeente, referentie, groepen, landelijk=True) -> list[
 
 
 def _index_chart(lijn: list[dict], keys: list[str], jaren: list[int], reeks: dict[int, float]):
-    """Rebase a euro line to 100 at its first year and lay the CBS index over it."""
+    """Rebase a euro line to 100 at its first year and lay the CBS index over it.
+
+    Per inhabitant, because that is what `lijn` already carries — a deliberate divergence from
+    the report, which contradicted itself here. Its five per-inwonergroep index measures rebased
+    [Avg Bedrag Per Gemeente], the *absolute* euro measure, against a hardcoded 2018; its generic
+    Index Avg Bedrag per Inwonersgroep rebased the per-inwoner one. Indexing absolute euros mixes
+    spending growth with population growth, which is not what the chart is asking, so the
+    per-inwoner reading wins and the lines will not match the old dashboard's exactly.
+
+    Rebasing at the first year that carries a figure rather than at a literal 2018 comes to the
+    same thing while the range starts there, and keeps a cohort that is blank in 2018 drawable.
+    """
     rows = [{"name": str(chart_jaar)} for chart_jaar in jaren]
 
     for key in keys:
@@ -618,6 +678,32 @@ def _verdeling(snapshot, cohorten, veld: str, labels: dict[str, str], meting) ->
     }
 
 
+def _bronnen(snapshot, reeksen, bronnen: dict, meting) -> dict:
+    """A bedrag split into named parts that are *measured* off a row rather than looked up.
+
+    The sibling of `_verdeling`, for a split the summary table does not carry as a breakdown
+    column: a part may be a scalar column, a hoofdcategorie minus one of its categorieën, or
+    the residual left of the total. Same payload shape, so the charts cannot tell the two apart.
+
+    Every split here has to partition its total exactly — these bars print the total at the end
+    and the segments have to add up to it — which is why each ends in a residual rather than in
+    one more named measure that might leave a gap.
+    """
+    return {
+        "series": [{"key": key, "name": label} for key, (label, _) in bronnen.items()],
+        "data": [
+            {
+                "name": reeks["label"],
+                **{
+                    key: meting(snapshot.get(reeks["key"], []), measure)
+                    for key, (_, measure) in bronnen.items()
+                },
+            }
+            for reeks in reeksen
+        ],
+    }
+
+
 # ── Begroting ───────────────────────────────────────────────────────────────────────
 #
 # The page reads one year from both sides: what comes in, split by where it comes from, and
@@ -636,12 +722,114 @@ def _verdeling(snapshot, cohorten, veld: str, labels: dict[str, str], meting) ->
 # sources that can be pinned to a categorie, and everything else is what is left of baten.
 # `heffingen` here is the narrow one (no leges) — the Lokale heffingen bar below splits the
 # wider `baten_heffingen_per_categorie`, and the two genuinely disagree. See definitions.py.
+#
+# Three parts, not four: the algemene uitkering and the SPUKs are drawn as one Rijk, because
+# on a bar asking where a gemeente's money comes from the answer for both is the same
+# government. They stay two columns on Iv3Summary and two measures elsewhere — the Baten pages
+# still give the SPUKs a page of their own, where the question is what kind of rijksgeld it is
+# rather than whether it is rijksgeld. The residual subtracts both, so the three still
+# partition baten exactly.
 INKOMSTEN_BRONNEN = {
-    "rijk": ("Algemene uitkering", lambda r: r.rijk),
-    "spuks": ("Specifieke uitkeringen", lambda r: r.spuks),
+    "rijk": ("Rijk", lambda r: r.rijk + r.spuks),
     "heffingen": ("Lokale heffingen", lambda r: r.heffingen),
     "overig": ("Overige inkomsten", lambda r: r.baten - r.rijk - r.spuks - r.heffingen),
 }
+
+# The hoofdcategorie the goederen en diensten sit in; `inhuur` (L3.5.1) is one of its
+# categorieën and is drawn out of it rather than beside it.
+_HOOFDCATEGORIE_GOEDEREN = "3"
+
+# What the money is spent on — the Begroting page's "Uitgaven per kostensoort".
+#
+# The two the dashboard has a column for are named, and the rest is cut once more so that
+# "overige goederen en diensten" reads as what is left of the goederen after the ingeleend
+# personeel is taken out of it. Not per_hoofdcategorie with its seven CBS classes: those are a
+# coding scheme rather than an answer to what an organisation spends its money on, and the
+# report grouped them exactly this way.
+#
+# Partitions `lasten` exactly: L1.1 + L3.5.1 + (hoofdcategorie 3 - L3.5.1) + the rest. The
+# breakdown column is reserve-free while `lasten` is not, so with the toggle on the
+# reservemutaties land in "Overige lasten" — which is where hoofdcategorie 7 belongs anyway.
+UITGAVEN_KOSTENSOORTEN = {
+    "salarissen": ("Salarissen en sociale lasten", lambda r: r.salarissen),
+    "inhuur": ("Ingeleend personeel", lambda r: r.inhuur),
+    "goederen": (
+        "Overige goederen en diensten",
+        lambda r: r.per_hoofdcategorie.get(_HOOFDCATEGORIE_GOEDEREN, 0.0) - r.inhuur,
+    ),
+    "overig": (
+        "Overige lasten",
+        lambda r: r.lasten - r.salarissen - r.per_hoofdcategorie.get(_HOOFDCATEGORIE_GOEDEREN, 0.0),
+    ),
+}
+
+def _heffing_taakvelden(slice_label: str):
+    """Sum the taakvelden that make up one heffing. OZB is two of them, the rest one each."""
+    codes = tuple(
+        code for code, label in d.BATEN_HEFFINGEN_TAAKVELDEN.items() if label == slice_label
+    )
+    return lambda r: sum(r.baten_heffingen_per_taakveld.get(code, 0.0) for code in codes)
+
+
+# The lokale heffingen as the report names them, in descending order of what they raise
+# nationally. Read off baten_heffingen_per_taakveld, because a heffing is what its taakveld says
+# it is — see BATEN_HEFFINGEN_TAAKVELDEN for why the categorie cannot answer this.
+#
+# The last is the residual against the categorie total, which is the same money counted the other
+# way: bouwleges, burgerzaken and a long tail that the report does not name individually. A
+# residual rather than a sixth measure, so the segments always sum to the bar's total.
+LOKALE_HEFFINGEN = {
+    "ozb": ("Onroerendezaakbelasting", _heffing_taakvelden("Onroerendezaakbelasting")),
+    "afval": ("Afvalheffing", _heffing_taakvelden("Afvalheffing")),
+    "riool": ("Rioolheffing", _heffing_taakvelden("Rioolheffing")),
+    "parkeren": ("Parkeerbelasting", _heffing_taakvelden("Parkeerbelasting")),
+    "overig": (
+        d.BATEN_HEFFINGEN_OVERIG_LABEL,
+        lambda r: sum(r.baten_heffingen_per_categorie.values())
+        - sum(r.baten_heffingen_per_taakveld.values()),
+    ),
+}
+
+# The overige inkomsten as the report names them. Two of the five need no column of their own:
+# the bijdragen uit reserves are hoofdcategorie 7 and the rente en dividenden hoofdcategorie 5,
+# both already in overige_baten_per_hoofdcategorie.
+#
+# Everything is measured off that one dict — including the reserves, rather than off the
+# `reserve_baten` column beside it — so the five partition it exactly whatever the sidebar toggle
+# is set to. With the toggle on, _apply_reservemutaties has already folded
+# reserve_baten_per_hoofdcategorie into it and the bijdragen uit reserves grow accordingly; with
+# it off they are the handful of hoofdcategorie-7 baten booked outside taakveld 0.10. Reading
+# `reserve_baten` here instead would double-count with the toggle on and leave the residual
+# wrong with it off.
+OVERIGE_INKOMSTEN = {
+    "reserves": (
+        "Bijdragen uit reserves",
+        lambda r: r.overige_baten_per_hoofdcategorie.get(d.HOOFDCATEGORIE_RESERVES, 0.0),
+    ),
+    "grond": (
+        "Inkomsten uit grond",
+        lambda r: r.overige_baten_grond_huren.get(d.CATEGORIE_BATEN_GROND, 0.0),
+    ),
+    "huren": (
+        "Huren en pachten",
+        lambda r: sum(
+            r.overige_baten_grond_huren.get(code, 0.0)
+            for code in d.CATEGORIEEN_BATEN_HUREN_PACHTEN
+        ),
+    ),
+    "rente": (
+        "Rente, dividenden en winsten",
+        lambda r: r.overige_baten_per_hoofdcategorie.get(d.HOOFDCATEGORIE_RENTE, 0.0),
+    ),
+    "overig": (
+        "Overige inkomsten",
+        lambda r: sum(r.overige_baten_per_hoofdcategorie.values())
+        - r.overige_baten_per_hoofdcategorie.get(d.HOOFDCATEGORIE_RESERVES, 0.0)
+        - r.overige_baten_per_hoofdcategorie.get(d.HOOFDCATEGORIE_RENTE, 0.0)
+        - sum(r.overige_baten_grond_huren.values()),
+    ),
+}
+
 
 RESULTAAT_POSTEN = {
     "inkomsten": lambda r: r.baten,
@@ -669,7 +857,12 @@ BEGROTING_VELDEN = (
     *_VELDEN_RESERVE_TOTALEN,  # RESULTAAT_POSTEN, LIJN_METRICS["uitgaven"]
     *_VELDEN_RESERVE_BATEN_VERDELING,
     "rijk", "spuks", "heffingen",  # INKOMSTEN_BRONNEN — "overig" is baten minus these three
-    "per_hoofdtaakveld", "per_hoofdcategorie", "baten_heffingen_per_categorie",  # _verdeling
+    "salarissen", "inhuur",  # UITGAVEN_KOSTENSOORTEN, alongside per_hoofdcategorie below
+    "per_hoofdtaakveld", "per_hoofdcategorie",  # _verdeling
+    # LOKALE_HEFFINGEN reads both heffingen columns: the taakveld cut for its four named slices
+    # and the categorie cut for the total its residual is taken against. OVERIGE_INKOMSTEN reads
+    # the grond/huren cut on top of the hoofdcategorie split already in the reserve parts above.
+    "baten_heffingen_per_categorie", "baten_heffingen_per_taakveld", "overige_baten_grond_huren",
 )
 
 
@@ -721,7 +914,11 @@ def _begroting_rows(chart_jaar: int, suffix: str, reserve: bool, codes=None) -> 
     rows = Iv3Summary.objects.filter(jaar=chart_jaar, verslagsoort=f"{chart_jaar}X{suffix}")
     if codes is not None:
         rows = rows.filter(gm_code__in=codes)
-    rows = list(rows.only(*BEGROTING_VELDEN))
+    # Before the fold, so the test stays one about the return that was filed rather than about
+    # what the toggle adds to it. A non-filer's reserve columns are zero as well, so the two
+    # orders agree; the Lasten page folds first on purpose, because there the toggle can move a
+    # *residual* off zero, which is a different question.
+    rows = _filter_niet_indieners(list(rows.only(*BEGROTING_VELDEN)))
     if reserve:
         # The baten side only: this page draws overige_baten_per_hoofdcategorie, and none of the
         # lasten breakdowns.
@@ -849,39 +1046,20 @@ def begroting(
             }
             for chart_jaar in jaren
         ],
-        "inkomsten": {
-            "series": [{"key": key, "name": label} for key, (label, _) in INKOMSTEN_BRONNEN.items()],
-            "data": [
-                {
-                    "name": reeks["label"],
-                    **{
-                        key: meting(snapshot.get(reeks["key"], []), measure)
-                        for key, (_, measure) in INKOMSTEN_BRONNEN.items()
-                    },
-                }
-                for reeks in reeksen
-            ],
-        },
+        "inkomsten": _bronnen(snapshot, reeksen, INKOMSTEN_BRONNEN, meting),
         "verdeling": {
             "hoofdtaakveld": _verdeling(
                 snapshot, reeksen, "per_hoofdtaakveld", d.HOOFDTAAKVELD_LABELS, meting
             ),
-            "hoofdcategorie": _verdeling(
-                snapshot, reeksen, "per_hoofdcategorie", d.HOOFDCATEGORIE_LABELS, meting
-            ),
-            # The report splits these two by a grouping column the warehouse does not carry
-            # (OZB against riolering, huren against grond); these are the coarser cut the
-            # Baten pages settled on for the same reason — right, but named differently.
-            "heffingen": _verdeling(
-                snapshot, reeksen, "baten_heffingen_per_categorie", d.BATEN_HEFFINGEN_LABELS, meting
-            ),
-            "overigeInkomsten": _verdeling(
-                snapshot,
-                reeksen,
-                "overige_baten_per_hoofdcategorie",
-                d.BATEN_OVERIG_HOOFDCATEGORIE_LABELS,
-                meting,
-            ),
+            # Measured rather than read off per_hoofdcategorie — see UITGAVEN_KOSTENSOORTEN.
+            # The key stays "hoofdcategorie": it is what the frontend reads this bar under, and
+            # the bar is still the kostensoort side of the page.
+            "hoofdcategorie": _bronnen(snapshot, reeksen, UITGAVEN_KOSTENSOORTEN, meting),
+            # Both split the way the report does — by taakveld and by categorie rather than by
+            # the coarser cut the columns beside them carry. See LOKALE_HEFFINGEN and
+            # OVERIGE_INKOMSTEN; each ends in a residual so the segments sum to the bar's total.
+            "heffingen": _bronnen(snapshot, reeksen, LOKALE_HEFFINGEN, meting),
+            "overigeInkomsten": _bronnen(snapshot, reeksen, OVERIGE_INKOMSTEN, meting),
         },
     }
 
@@ -1494,8 +1672,11 @@ MANAGEMENT_VELDEN = (
     "eigen_vermogen", "balanstotaal",  # _solvabiliteit_pct
 )
 
-# The solvabiliteit alone, for the Begroting path's second loop: four scalars and no JSON at all.
-BALANS_VELDEN = (*_VELDEN_BASIS, "eigen_vermogen", "balanstotaal")
+# The solvabiliteit alone, for the Begroting path's second loop: six scalars and no JSON at all.
+# lasten and baten are not read off these rows — they are here because _management_per_jaar runs
+# _filter_niet_indieners over whatever it fetched, and a deferred attribute there would cost one
+# SELECT per row per year. Two floats against ~2.400 queries.
+BALANS_VELDEN = (*_VELDEN_BASIS, "lasten", "baten", "eigen_vermogen", "balanstotaal")
 
 
 def _solvabiliteit_pct(rows) -> float | None:
@@ -1510,14 +1691,26 @@ def _solvabiliteit_pct(rows) -> float | None:
     near it but not it. The pooled figure is what the sync's columns are checked against; this is
     what the page draws, for the same reason every other cohort on this dashboard is a mean.
 
+    It will also not match the old Power BI dashboard, and for a second reason worth knowing: the
+    report did not compute a solvabiliteit at all. Its `solvabiliteit` table was a SharePoint
+    workbook of published kerngetallen ("Financiële kerngetallen - Gemeenten.xlsx"), joined on
+    gemeentecode + verslagsoort and divided by 100, and its measure was a plain
+    SUM(solvabiliteit[Solvabiliteit]) over that. So the report carried a figure for the Begroting
+    too, where this reads only the Jaarrekening — see the Balans block in definitions.py for why
+    a Begroting balans is not worth reading. Computing it here from P11 over the passiva is the
+    deliberate choice; it is the one that is verifiable against 71231ned.
+
     A zero balanstotaal is "no balance sheet" rather than a gemeente without assets: only the
     Jaarrekening carries one, and a dozen X005 rows are gemeenten that filed nothing at all.
     Both drop out here.
+
+    Keeps one decimal: a tenth is a real difference between two gemeenten here, which whole-euro
+    rounding would throw away — the chart card says as much on the frontend side.
     """
     ratios = [row.eigen_vermogen / row.balanstotaal * 100 for row in rows if row.balanstotaal]
     if not ratios:
         return None
-    return _round(sum(ratios) / len(ratios))
+    return round(sum(ratios) / len(ratios), 1)
 
 
 def _management_per_jaar(jaar: int, suffix: str, gemeente, referentie, reserve: bool, velden):
@@ -1540,10 +1733,12 @@ def _management_per_jaar(jaar: int, suffix: str, gemeente, referentie, reserve: 
     codes = _cohort_selectie(gemeente, referentie)
     per_jaar = {}
     for chart_jaar in jaren:
-        rows = list(
-            Iv3Summary.objects.filter(jaar=chart_jaar, verslagsoort=f"{chart_jaar}X{suffix}")
-            .filter(gm_code__in=codes)
-            .only(*velden)
+        rows = _filter_niet_indieners(
+            list(
+                Iv3Summary.objects.filter(jaar=chart_jaar, verslagsoort=f"{chart_jaar}X{suffix}")
+                .filter(gm_code__in=codes)
+                .only(*velden)
+            )
         )
         if reserve:
             # Neither breakdown: the toggle reaches this page through the uitgaven line's total
@@ -1583,6 +1778,13 @@ def managementoverzicht(
     equals Begroting's uitgavenPerJaar for the same cohort, and salarissen + inhuur + overhead
     equals Benchmark's trend. A gemeente that books nothing on inhuur has a real zero, and on a
     page asking how your organisation compares, a zero is the answer rather than a blank.
+
+    A gemeente that filed *nothing* is a different case and is dropped, by
+    _filter_niet_indieners in _management_per_jaar. That is still one cohort for the whole page
+    rather than one per metric, so both identities above survive — and it is what closed the gap
+    with the old dashboard: 2024X000 with referentie=alle read €3.646 per inwoner while the
+    report read €3.657, the whole of the difference being Vijfheerenlanden's empty 2024 begroting
+    counted as a gemeente spending nothing.
     """
     referentie = referentie or []
     suffix = verslagsoort[-3:]
