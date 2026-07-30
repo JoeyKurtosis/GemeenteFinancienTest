@@ -1346,6 +1346,46 @@ def _overige_baten(row) -> float:
     return row.baten - row.rijk - row.spuks - _baten_heffingen(row)
 
 
+# The Lokale heffingen slices as the report's legend lists them: its "(Leeg)" bucket, then the
+# five of LOKALE_HEFFINGEN — OZB, riolering, afval, parkeren, rest.
+#
+# That bucket is empty by construction rather than merely empty in this data, so it is a legend
+# entry and nothing more. baten_heffingen_per_taakveld carries exactly the five codes of
+# BATEN_HEFFINGEN_TAAKVELDEN, and every euro on any other taakveld is already the "Overige
+# belastingen en leges" residual — there is nothing left for a blank to hold. Drawn because the
+# report draws it and the two screens are read against each other; unlike LEEG_TAAKVELD on the
+# Lasten donut, which is the same label over real money.
+BATEN_HEFFINGEN_SLICES = {
+    LEEG_TAAKVELD: LEEG_TAAKVELD_LABEL,
+    **{key: label for key, (label, _) in LOKALE_HEFFINGEN.items()},
+}
+
+
+def _heffingen_waarden(row) -> dict[str, float]:
+    """The Lokale heffingen page's slices, keyed as BATEN_HEFFINGEN_SLICES.
+
+    The same measures the Begroting page's Lokale heffingen bar draws — see LOKALE_HEFFINGEN,
+    which is where the residual that keeps these summing to `_baten_heffingen` lives.
+    """
+    return {
+        LEEG_TAAKVELD: 0.0,
+        **{key: meting(row) for key, (_, meting) in LOKALE_HEFFINGEN.items()},
+    }
+
+
+# The Overige inkomsten slices, likewise the report's own: reserves, grond, huren, rente, rest.
+BATEN_OVERIG_SLICES = {key: label for key, (label, _) in OVERIGE_INKOMSTEN.items()}
+
+
+def _overige_inkomsten_waarden(row) -> dict[str, float]:
+    """The Overige inkomsten page's slices, keyed as BATEN_OVERIG_SLICES.
+
+    Reads `gevouwen_reserve_baten`, which `baten()` sets on every row of this page for the same
+    reason _begroting_rows does — see OVERIGE_INKOMSTEN.
+    """
+    return {key: meting(row) for key, (_, meting) in OVERIGE_INKOMSTEN.items()}
+
+
 def _bron_waarden(row) -> dict[str, float]:
     """The main page's four slices, keyed as BATEN_BRON_LABELS.
 
@@ -1366,9 +1406,16 @@ def _bron_waarden(row) -> dict[str, float]:
 #
 # The three detail pages split by a dimension the report holds in a grouping column
 # (taakvelden[Lokale heffingen], categorieen[Overige inkomsten]). Those columns were not in
-# the file to copy, so each page splits by the coarser dimension its own bar chart already
-# names — categorie for the heffingen, hoofdtaakveld for the SPUKs, hoofdcategorie for the
-# rest. The slices are therefore right but named differently from the report's.
+# the file to copy, so the two that cannot reconstruct one split by the coarser dimension their
+# own bar chart already names — hoofdtaakveld for the SPUKs, hoofdcategorie for the rest. Their
+# slices are therefore right but named differently from the report's.
+#
+# The heffingen page is the exception, and reconstructs the report's split: BATEN_HEFFINGEN_TAAKVELDEN
+# names the taakvelden behind each heffing, so the page draws the same five slices as the
+# Begroting page's Lokale heffingen bar. It used to split by categorie, which put
+# "2.2.1 Belastingen op producenten" in the legend where the report says "Onroerendezaakbelasting" —
+# a legend that named who was taxed rather than which heffing, and the two do not line up at all:
+# the rioolheffing alone is spread over all three categorieën.
 #
 # `baten_verdeling` says whether the reservemutaties toggle has to fold the Overige inkomsten
 # breakdown for this page, and `velden` is what the page reads off a row. The two travel together
@@ -1401,21 +1448,25 @@ BATEN_PAGINAS = {
     },
     "heffingen": {
         "totaal": _baten_heffingen,
-        "waarden": lambda row: row.baten_heffingen_per_categorie,
-        "labels": d.BATEN_HEFFINGEN_LABELS,
+        "waarden": _heffingen_waarden,
+        "labels": BATEN_HEFFINGEN_SLICES,
         "baten_verdeling": False,
-        "velden": (*_VELDEN_BASIS, *_VELDEN_RESERVE_TOTALEN, "baten_heffingen_per_categorie"),
+        # Both heffingen columns, as LOKALE_HEFFINGEN needs them: the taakveld cut for the four
+        # named slices, the categorie cut for the total the fifth is a residual against.
+        "velden": (*_VELDEN_BASIS, *_VELDEN_RESERVE_TOTALEN,
+                   "baten_heffingen_per_categorie", "baten_heffingen_per_taakveld"),
     },
     "overig": {
         "totaal": _overige_baten,
-        "waarden": lambda row: row.overige_baten_per_hoofdcategorie,
-        # Without the salarissen, which cannot be a baat — see the constant.
-        "labels": d.BATEN_OVERIG_HOOFDCATEGORIE_LABELS,
+        "waarden": _overige_inkomsten_waarden,
+        "labels": BATEN_OVERIG_SLICES,
         # The one Baten page that reads a breakdown the toggle moves: reserve_baten lands in the
-        # residual, which is this page's whole subject.
+        # residual, which is this page's whole subject. It is also what tells `baten()` to set
+        # gevouwen_reserve_baten, the column the bijdragen uit reserves slice is measured from.
         "baten_verdeling": True,
         "velden": (*_VELDEN_BASIS, *_VELDEN_RESERVE_TOTALEN, *_VELDEN_RESERVE_BATEN_VERDELING,
-                   "rijk", "spuks", "baten_heffingen_per_categorie"),
+                   "rijk", "spuks", "baten_heffingen_per_categorie",
+                   "overige_baten_grond_huren"),  # OVERIGE_INKOMSTEN's grond and huren slices
     },
 }
 
@@ -1461,6 +1512,15 @@ def baten(
         # Before the zero filter: the toggle can move a gemeente's residual off zero.
         if reserve:
             _apply_reservemutaties(rows, baten_verdeling=pagina["baten_verdeling"])
+
+        # How much of overige_baten_per_hoofdcategorie is reservemutaties — the bijdragen uit
+        # reserves slice, and only the Overige inkomsten page draws it. Set either way rather than
+        # only under the toggle, so the measure never meets an attribute that is missing; zero when
+        # the fold did not happen is the honest answer, those euros being absent from the page's
+        # own total as well. Same reasoning, same column as _begroting_rows.
+        if pagina["baten_verdeling"]:
+            for row in rows:
+                row.gevouwen_reserve_baten = row.reserve_baten if reserve else 0.0
 
         # A gemeente with nothing at all under this bron is blank in the report's measure,
         # not a zero — Power BI averages over VALUES(Gemeente), which such a gemeente never

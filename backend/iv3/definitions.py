@@ -274,16 +274,10 @@ BATEN_BRON_LABELS = {
     "overig": "Overige inkomsten",  # EUR 640/inw
 }
 
-# The lokale heffingen split, keyed by the categorie codes of
-# CATEGORIEEN_BATEN_LOKALE_HEFFINGEN. Labels as the report's own bar chart writes them.
-BATEN_HEFFINGEN_LABELS = {
-    "B2.2.1": "2.2.1 Belastingen op producenten",
-    "B2.2.2": "2.2.2 Belastingen op huishoudens",
-    "B3.7": "3.7 Leges en andere rechten",
-}
-
-# The same heffingen by taakveld, which is the cut that says what a heffing *is* — the
-# categorie above only says who was taxed and under which heading it was booked.
+# The heffingen by taakveld, which is the cut that says what a heffing *is*. The categorie cut
+# beside it (CATEGORIEEN_BATEN_LOKALE_HEFFINGEN: B2.2.1 Belastingen op producenten, B2.2.2
+# Belastingen op huishoudens, B3.7 Leges en andere rechten) only says who was taxed and under
+# which heading it was booked, which is why no chart splits by it — see BATEN_PAGINAS.
 #
 # The mapping is the report's, and every code was read off the warehouse's own taakveld labels
 # rather than assumed (jaar 2024, verslagsoort 2024X005). Two taakvelden make one OZB because
@@ -317,17 +311,6 @@ CATEGORIEEN_BATEN_GROND_HUREN = (CATEGORIE_BATEN_GROND, *CATEGORIEEN_BATEN_HUREN
 # rente and dividenden and sit on 0.5 Treasury.
 HOOFDCATEGORIE_RESERVES = "7"
 HOOFDCATEGORIE_RENTE = "5"
-
-# The hoofdcategorieën the Overige inkomsten donut splits into: HOOFDCATEGORIE_LABELS without
-# the salarissen. A gemeente is not paid a salary — 1 is a cost categorie, and it never occurs
-# as a baat anywhere in the warehouse (checked over every jaar and verslagsoort), so leaving it
-# in would only put a permanently empty slice in the legend. The rest are all reachable, 7
-# included: the reservemutaties the sidebar toggle folds in are booked there almost to the euro
-# (EUR 491/inw of the 491), and they land in this bron. Defined here rather than inline so the
-# donut and the labels beside it cannot drift apart.
-BATEN_OVERIG_HOOFDCATEGORIE_LABELS = {
-    code: label for code, label in HOOFDCATEGORIE_LABELS.items() if code != "1"
-}
 
 # ── Taakveldnamen ───────────────────────────────────────────────────────────────────
 #

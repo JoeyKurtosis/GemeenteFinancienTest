@@ -107,14 +107,14 @@ export const BATEN_PAGINAS: Record<BatenBron, BatenPagina> = {
         referentiegroepSeries: bar("Overige baten rijk per inwoner"),
     },
     heffingen: {
-        donutTitle: "Baten per inwoner per categorie",
+        donutTitle: "Baten per inwoner per heffing",
         uitlegParagraphs: [
             "Hier zie je een overzicht van de baten uit lokale heffingen van jouw gemeente en de gekozen referentiegroep. Dit omvat verschillende lokale belastingen, maar daarnaast ook inkomsten uit vergunningen en leges.",
         ],
         referentiegroepSeries: bar("Lokale heffingen per inwoner"),
     },
     overig: {
-        donutTitle: "Baten per inwoner per hoofdcategorie",
+        donutTitle: "Baten per inwoner per inkomstensoort",
         uitlegParagraphs: [
             "Hier zie je een overzicht van de baten uit overige bronnen van jouw gemeente en de gekozen referentiegroep. Dit omvat bijvoorbeeld bijdragen vanuit reserves en inkomsten uit grond. Daarnaast vallen alle baten, die niet binnen andere hokjes passen, in deze bron.",
         ],
