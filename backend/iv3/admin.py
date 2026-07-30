@@ -12,7 +12,7 @@ actually good for here: looking at what shipped.
 
 from django.contrib import admin
 
-from iv3.models import Gemeente, Inwoners, Iv3Summary, Iv3Taakveld
+from iv3.models import DashboardSettings, Gemeente, Inwoners, Iv3Summary, Iv3Taakveld, Measure
 
 
 class ReadOnlyAdmin(admin.ModelAdmin):
@@ -59,3 +59,20 @@ class Iv3TaakveldAdmin(ReadOnlyAdmin):
     list_display = ["code", "titel", "jaar"]
     list_filter = ["jaar"]
     search_fields = ["code", "titel"]
+
+
+@admin.register(DashboardSettings)
+class DashboardSettingsAdmin(admin.ModelAdmin):
+    list_display = ["__str__", "aggregation_method"]
+
+    def has_add_permission(self, request):
+        return not DashboardSettings.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(Measure)
+class MeasureAdmin(admin.ModelAdmin):
+    list_display = ["key", "name", "expression", "page"]
+    search_fields = ["key", "name"]

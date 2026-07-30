@@ -103,20 +103,33 @@ export function GemeentelijkeStandRouteView() {
             {/* ── Verdeling van Uitgaven ── */}
             <div className="space-y-6">
                 <SectionHeading>Verdeling van Uitgaven</SectionHeading>
+                {/* A verdeling is read as shares rather than as amounts — what a size class
+                    spends its money on, not how much of it there is. The payload is euros
+                    either way; `normalize` is what turns the bars into 100% stacks.
+
+                    The two titles are crossed against the breakdowns they carry, and that is
+                    the report: its "per hoofdtaakveld" chart has a hoofdcategorie legend
+                    (Salarissen, Belastingen, Goederen en diensten) and its "per categorie"
+                    chart a hoofdtaakveld one (Bestuur, Veiligheid, Sociaal domein). Matched
+                    here rather than corrected, so the page reads as the report it mirrors. */}
                 <div className="grid gap-6 lg:grid-cols-2">
                     <ChartCard
                         title="Gemiddelde verdeling uitgaven per hoofdtaakveld"
-                        data={hoofdtaakveld?.data ?? []}
-                        series={verdelingSeries(hoofdtaakveld)}
+                        data={hoofdcategorie?.data ?? []}
+                        series={verdelingSeries(hoofdcategorie)}
                         chartType="horizontal-bar"
+                        valueFormat="percent"
+                        normalize
                         isLoading={isLoading}
                         expandable
                     />
                     <ChartCard
                         title="Gemiddelde verdeling uitgaven per categorie"
-                        data={hoofdcategorie?.data ?? []}
-                        series={verdelingSeries(hoofdcategorie)}
+                        data={hoofdtaakveld?.data ?? []}
+                        series={verdelingSeries(hoofdtaakveld)}
                         chartType="horizontal-bar"
+                        valueFormat="percent"
+                        normalize
                         isLoading={isLoading}
                         expandable
                     />

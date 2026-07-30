@@ -8,6 +8,7 @@ import {
     FileCheck02,
     Home02,
     MessageCircle01,
+    Settings01,
     User02,
     Wallet02,
 } from "@untitledui/icons";
@@ -63,6 +64,12 @@ const navItems: NavItemType[] = [
     },
 ];
 
+const instellingenNavItem: NavItemType = {
+    label: "Instellingen",
+    href: "/instellingen",
+    icon: Settings01,
+};
+
 const supportNavItem: NavItemType = {
     label: "Support",
     href: "/support",
@@ -72,9 +79,13 @@ const supportNavItem: NavItemType = {
 export function AppSidebar() {
     const router = useRouter();
     const pathname = router.state.location.pathname;
-    const { isAuthenticated } = useAuth();
+    const { isAuthenticated, isAdmin } = useAuth();
 
-    const items = isAuthenticated ? [...navItems, supportNavItem] : navItems;
+    const items = [
+        ...navItems,
+        ...(isAdmin ? [instellingenNavItem] : []),
+        ...(isAuthenticated ? [supportNavItem] : []),
+    ];
 
     return <SidebarNavigationSimple activeUrl={pathname} items={items} showAccountCard />;
 }

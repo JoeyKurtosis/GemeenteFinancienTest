@@ -30,15 +30,20 @@ export interface GemeentelijkeStand {
 }
 
 /**
- * No gemeente or referentiegroep: this page's charts compare inwonergroepen and nothing
- * else, the shape the Power BI report draws them in. Those two sidebar filters still drive
- * the other pages.
+ * No gemeente: this page's charts compare inwonergroepen and nothing else, the shape the
+ * Power BI report draws them in, so there is no single-gemeente line to draw.
  */
 export interface GemeentelijkeStandParams {
     jaar?: number | null;
     verslagsoort?: string | null;
     /** Comma-joined inwonergroep ids, as the URL carries them. */
     inwoner?: string | null;
+    /**
+     * Comma-joined gemeente codes or the `alle` sentinel — the report's Gemeente slicer.
+     * Not a cohort of its own here, but which municipalities count towards their size
+     * class's average.
+     */
+    referentie?: string | null;
     reserve?: boolean;
     /**
      * Aborts a request the caller has superseded. Does not stop the work — under WSGI the view
@@ -58,6 +63,7 @@ export async function fetchGemeentelijkeStand(params: GemeentelijkeStandParams):
     if (params.jaar) query.set("jaar", String(params.jaar));
     if (params.verslagsoort) query.set("verslagsoort", params.verslagsoort);
     if (params.inwoner) query.set("inwoner", params.inwoner);
+    if (params.referentie) query.set("referentie", params.referentie);
     if (params.reserve) query.set("reserve", "true");
 
     const response = await fetch(`/api/iv3/gemeentelijke-stand/?${query}`, { credentials: "include", signal: params.signal });

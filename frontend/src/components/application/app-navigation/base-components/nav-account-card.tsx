@@ -119,7 +119,7 @@ const NavAccountCardMenuItem = ({
 
     if (href) {
         return (
-            <Link to={href} className={className} onClick={buttonProps.onClick as MouseEventHandler<HTMLAnchorElement> | undefined}>
+            <Link to={href} search={true} className={className} onClick={buttonProps.onClick as MouseEventHandler<HTMLAnchorElement> | undefined}>
                 {content}
             </Link>
         );

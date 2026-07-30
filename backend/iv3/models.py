@@ -82,6 +82,11 @@ class Iv3Summary(models.Model):
     inwoners = models.IntegerField(null=True)
 
     # Totals, excluding the reservemutaties taakveld.
+    #
+    # Taakveld 0.11 Resultaat is in `baten` and out of `lasten` — not an oversight but the
+    # report's own asymmetry, reproduced. See definitions.TAAKVELD_RESULTAAT. One consequence
+    # worth knowing before reading a saldo off these two: they no longer close against each
+    # other, so `baten - lasten` carries 0.11 as well as the real resultaat.
     lasten = models.FloatField(default=0)
     baten = models.FloatField(default=0)
 
@@ -150,9 +155,25 @@ class Iv3Summary(models.Model):
     # and the older pages genuinely disagree on the leges, see that constant.
     baten_heffingen_per_categorie = models.JSONField(default=dict)
 
+    # The same heffingen, cut the other way: by taakveld code ("0.61", "7.2") instead of by
+    # categorie. That is the cut the Lokale heffingen bar reads, because what a heffing *is*
+    # sits in its taakveld and not in its categorie — riolering is booked under B2.2.2, B2.2.1
+    # and B3.7 alike, and all three of those are the rioolheffing. See BATEN_HEFFINGEN_TAAKVELDEN.
+    baten_heffingen_per_taakveld = models.JSONField(default=dict)
+
     # Everything left of baten once the heffingen and the rijk are taken out, per
     # hoofdcategorie ("1".."7").
     overige_baten_per_hoofdcategorie = models.JSONField(default=dict)
+
+    # Three of those same overige baten again, at full categorie rather than hoofdcategorie:
+    # B3.1 Grond, B3.3 Pachten, B3.6 Huren. The Overige inkomsten bar names grondverkopen and
+    # huren separately, and hoofdcategorie 3 lumps them in with everything else bought and sold.
+    #
+    # Deliberately these three and not every baten categorie: a row already carries ~2KB of JSON
+    # and the other thirty-odd codes answer no question the dashboard asks. The bar's two
+    # remaining named slices need no column at all — bijdragen uit reserves is `reserve_baten`
+    # and rente/dividenden is hoofdcategorie 5 above.
+    overige_baten_grond_huren = models.JSONField(default=dict)
 
     # The reservemutaties taakveld's baten per hoofdcategorie, kept apart for the same reason
     # reserve_baten is: the toggle folds it in per request. It rides with the residual, since
@@ -185,6 +206,38 @@ class Iv3Summary(models.Model):
     # reserve_baten_per_hoofdcategorie. 0.10 is itself a taakveld of hoofdtaakveld 0, which is
     # where the toggle folds it back to.
     reserve_lasten_per_hoofdcategorie = models.JSONField(default=dict)
+
+    # The lasten booked on taakveld 0.11 Resultaat, per hoofdcategorie ("1".."7").
+    #
+    # Kept out of `lasten` and out of every breakdown beside it, because 0.11 is the saldo *of*
+    # the rows those add up — counting it there would add a gemeente's begrotingsresultaat to its
+    # spending. The Lasten pages draw it anyway, on their own, because the report does: its donut
+    # reads EUR 823 per inwoner on hoofdtaakveld 0 for the 2024 Begroting referentiegroep where
+    # the exploitatie alone is 801, and its trend runs 6 to 18 euro above the Begroting page's for
+    # the same cohort and years. Per hoofdcategorie because the Lasten kostensoort bar needs to
+    # place it; it lands almost entirely in 7.
+    #
+    # The lasten half only, and deliberately so: 0.11's *baten* are not held apart here but left
+    # in `baten` where the report counts them. See definitions.TAAKVELD_RESULTAAT.
+    #
+    # Zero for most gemeenten — 212 of 341 booked anything here in the 2023 Begroting.
+    resultaat_lasten_per_hoofdcategorie = models.JSONField(default=dict)
+
+    # The lasten on the taakvelden the source never names — definitions.TAAKVELD_LABELS_ZONDER_BRON,
+    # the jeugdhulp codes 6.73 through 6.79 — split by hoofdcategorie ("1".."7"). All of
+    # hoofdtaakveld 6, and already counted in per_hoofdtaakveld["6"] and in lasten_per_taakveld;
+    # this is the same money singled out.
+    #
+    # The Begroting page draws the total as its own "(Leeg)" segment, as the report does, which
+    # means subtracting it from the sociaal domein. Per hoofdcategorie rather than as one figure
+    # because the Lasten detail page needs to take it back out of its kostensoort bar as well, and
+    # that bar splits hoofdcategorie 3 from the rest — a single total cannot say how much of it
+    # was goederen en diensten.
+    #
+    # Could be read out of lasten_per_taakveld instead, were that column carrying a categorie
+    # split, which it is not; and the pages that need this read neither of the two big lasten
+    # breakdowns anyway. Seven small keys against ~800 bytes of JSON on every row.
+    naamloze_lasten_per_hoofdcategorie = models.JSONField(default=dict)
 
     class Meta:
         constraints = [
@@ -228,3 +281,62 @@ class Iv3Taakveld(models.Model):
 
     def __str__(self):
         return f"{self.jaar} {self.code} {self.titel}"
+
+
+class DashboardSettings(models.Model):
+    """Site-wide configurable parameters for the dashboard calculations.
+
+    Singleton: exactly one row (pk=1). Use DashboardSettings.load() to read it.
+    Empty/null fields fall back to the hardcoded defaults in definitions.py via
+    settings_bridge.get_settings().
+    """
+
+    cpi_per_jaar = models.JSONField(default=dict, blank=True)
+    cao_lonen_per_jaar = models.JSONField(default=dict, blank=True)
+    inwonergroepen = models.JSONField(default=list, blank=True)
+    aggregation_method = models.CharField(
+        max_length=32,
+        default="equal_weight",
+        choices=[
+            ("equal_weight", "Equal-weight mean"),
+            ("population_weighted", "Population-weighted mean"),
+        ],
+    )
+    taakveld_label_overrides = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        verbose_name = "Dashboard-instellingen"
+        verbose_name_plural = "Dashboard-instellingen"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def __str__(self):
+        return "Dashboard-instellingen"
+
+
+class Measure(models.Model):
+    """A named calculation formula, editable from the settings page.
+
+    Each measure defines how a metric is computed from Iv3Summary fields.
+    The expression is a simple math formula over field names (e.g.,
+    "salarissen + inhuur"). See expression_eval.py for the allowed syntax.
+    """
+
+    key = models.SlugField(max_length=64, unique=True)
+    name = models.CharField(max_length=128)
+    expression = models.TextField()
+    description = models.TextField(blank=True, default="")
+    page = models.CharField(max_length=255, blank=True, default="")
+
+    class Meta:
+        ordering = ["key"]
+
+    def __str__(self):
+        return f"{self.name} ({self.key})"

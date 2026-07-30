@@ -4,10 +4,15 @@ from iv3.views import (
     BatenView,
     BegrotingView,
     BenchmarkView,
+    DashboardSettingsDefaultsView,
+    DashboardSettingsView,
     FilterOptionsView,
     GemeentelijkeStandView,
     LastenView,
     ManagementoverzichtView,
+    MeasureDetailView,
+    MeasureListView,
+    MeasureResetView,
 )
 
 urlpatterns = [
@@ -22,4 +27,9 @@ urlpatterns = [
         ManagementoverzichtView.as_view(),
         name="iv3-managementoverzicht",
     ),
+    path("settings/", DashboardSettingsView.as_view(), name="iv3-settings"),
+    path("settings/defaults/", DashboardSettingsDefaultsView.as_view(), name="iv3-settings-defaults"),
+    path("measures/", MeasureListView.as_view(), name="iv3-measures"),
+    path("measures/reset/", MeasureResetView.as_view(), name="iv3-measures-reset"),
+    path("measures/<slug:key>/", MeasureDetailView.as_view(), name="iv3-measure-detail"),
 ]

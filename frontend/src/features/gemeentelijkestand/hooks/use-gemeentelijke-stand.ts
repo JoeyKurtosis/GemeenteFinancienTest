@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { serializeCodes, useFilters } from "@/features/filters";
+import { serializeApplied, serializeCodes, useFilters } from "@/features/filters";
 import { type GemeentelijkeStand, fetchGemeentelijkeStand } from "../api";
 
 /**
@@ -31,7 +31,12 @@ export function useGemeentelijkeStand() {
         return serializeCodes(ids);
     }, [applied.inwonergroepen, options.inwonergroepen]);
 
-    // No gemeente or referentiegroep: the charts compare inwonergroepen and nothing else.
+    // The gemeenten the averages are taken over — the sidebar's "Gemeente" on this route.
+    // Unlike the inwonergroepen above this keeps the `alle` sentinel rather than expanding
+    // it: the backend resolves it, and expanding would make this wait on /filters/ twice.
+    const referentie = useMemo(() => serializeApplied(applied.referentiegroepen), [applied.referentiegroepen]);
+
+    // No gemeente: the charts compare inwonergroepen, so there is no single-gemeente line.
     const { jaar, verslagsoort, reservemutaties } = applied;
 
     useEffect(() => {
@@ -48,6 +53,7 @@ export function useGemeentelijkeStand() {
                     jaar,
                     verslagsoort,
                     inwoner,
+                    referentie,
                     reserve: reservemutaties,
                     signal: controller.signal,
                 });
@@ -66,7 +72,7 @@ export function useGemeentelijkeStand() {
 
         load();
         return () => controller.abort();
-    }, [isReady, jaar, verslagsoort, inwoner, reservemutaties]);
+    }, [isReady, jaar, verslagsoort, inwoner, referentie, reservemutaties]);
 
     return { data, isLoading, error };
 }

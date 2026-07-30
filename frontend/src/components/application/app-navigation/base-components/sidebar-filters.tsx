@@ -48,10 +48,20 @@ const withAllesRow = (options: FilterOption[], selected: Selection, onChange: (k
 };
 
 /** Route prefixes where the "Reservemutaties" toggle is relevant (matches sub-routes too). */
-const reservemutatiesRoutes = ["/begroting", "/baten", "/lasten", "/gemeentelijkestand"];
+const reservemutatiesRoutes = ["/begroting", "/baten", "/lasten", "/gemeentelijkestand", "/managementoverzicht"];
 
 /** Route prefixes where the "Verslagsoort" filter is relevant (matches sub-routes too). */
-const verslagsoortRoutes = ["/gemeentelijkestand", "/benchmark"];
+const verslagsoortRoutes = ["/gemeentelijkestand", "/benchmark", "/baten", "/managementoverzicht"];
+
+/**
+ * Routes where "Verslagsoort" applies to the index page and *not* to its sub-routes.
+ *
+ * /begroting alone: its overzicht tab is drawn from one report like every other page, but the
+ * two begroting-vs-jaarrekening tabs put both verslagsoorten on the category axis and compare
+ * them against each other. Picking one there answers nothing — queries.begroting sends those
+ * two down _begroting_per_verslagsoort, which never reads the selected code.
+ */
+const verslagsoortIndexRoutes = ["/begroting"];
 
 export interface SidebarFiltersState {
     selectedGemeente: Key | null;
@@ -76,9 +86,13 @@ interface SidebarFiltersProps extends SidebarFiltersState {
 }
 
 /**
- * The three dashboard filters (gemeente / referentiegroep / jaar). Rendered
- * inline in the expanded sidebar header and inside a popover when collapsed.
+ * The dashboard filters, of which each route shows the ones it actually draws with.
+ * Rendered inline in the expanded sidebar header and inside a popover when collapsed.
  * State is owned by the parent so it stays in sync between both renderings.
+ *
+ * Gemeentelijke Stand is the one route that reads differently: it has no single gemeente
+ * to compare against a group, so the ComboBox is left off and the multi-select is the
+ * report's "Gemeente" slicer — the set of municipalities every average is taken over.
  */
 export const SidebarFilters = ({
     selectedGemeente,
@@ -97,11 +111,23 @@ export const SidebarFilters = ({
     onApply,
 }: SidebarFiltersProps) => {
     const { pathname } = useLocation();
-    const { options, isLoading, reset, apply, hasPendingChanges } = useFilters();
+    const { options, draftVerslagsoorten, isLoading, reset, apply, hasPendingChanges } = useFilters();
+
+    // The one route whose filters read differently — see the component docstring.
+    const isGemeentelijkeStand = pathname === "/gemeentelijkestand" || pathname.startsWith("/gemeentelijkestand/");
 
     const showReservemutaties = reservemutatiesRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`));
-    const showInwonergroep = pathname === "/gemeentelijkestand" || pathname.startsWith("/gemeentelijkestand/");
-    const showVerslagsoort = verslagsoortRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+    // Only where there is a choice to make. A year carries a Jaarrekening once it has been
+    // filed, so the newest year or two hold nothing but a Begroting — and a dropdown with one
+    // option is a control that cannot do anything. Counted off the options rather than tested
+    // for the "005" suffix, so this stays a statement about having something to pick.
+    //
+    // Off the *draft* year, not the applied one: picking 2024 in the select beside this has to
+    // reveal the choice immediately, not after a Toepassen and a second trip into this menu.
+    const opVerslagsoortRoute =
+        verslagsoortRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`)) ||
+        verslagsoortIndexRoutes.some((route) => pathname === route || pathname === `${route}/`);
+    const showVerslagsoort = draftVerslagsoorten.length > 1 && opVerslagsoortRoute;
 
     const jaren = options.jaren.map((jaar) => ({ id: String(jaar), label: String(jaar) }));
 
@@ -110,25 +136,29 @@ export const SidebarFilters = ({
 
     return (
         <div className={cx("flex flex-col gap-4", className)}>
-            <Select.ComboBox
-                label="Jouw gemeente"
-                placeholder={isLoading ? "Laden..." : "Zoek gemeente..."}
-                size="sm"
-                shortcut={false}
-                isDisabled={isLoading}
-                items={options.gemeenten}
-                selectedKey={selectedGemeente}
-                onSelectionChange={onGemeenteChange}
-            >
-                {(item) => (
-                    <Select.Item id={item.id} label={item.label}>
-                        {item.label}
-                    </Select.Item>
-                )}
-            </Select.ComboBox>
+            {!isGemeentelijkeStand && (
+                <Select.ComboBox
+                    label="Jouw gemeente"
+                    placeholder={isLoading ? "Laden..." : "Zoek gemeente..."}
+                    size="sm"
+                    shortcut={false}
+                    isDisabled={isLoading}
+                    items={options.gemeenten}
+                    selectedKey={selectedGemeente}
+                    onSelectionChange={onGemeenteChange}
+                >
+                    {(item) => (
+                        <Select.Item id={item.id} label={item.label}>
+                            {item.label}
+                        </Select.Item>
+                    )}
+                </Select.ComboBox>
+            )}
 
+            {/* One selection, two readings: the group your gemeente is held against
+                elsewhere, the population the averages are taken over here. */}
             <MultiSelect
-                label="Referentiegroep"
+                label={isGemeentelijkeStand ? "Gemeente" : "Referentiegroep"}
                 placeholder="Selecteer gemeenten"
                 size="sm"
                 isDisabled={isLoading}
@@ -143,7 +173,7 @@ export const SidebarFilters = ({
             </MultiSelect>
 
             {/* Each selected size class becomes a line of its own on the charts. */}
-            {showInwonergroep && (
+            {isGemeentelijkeStand && (
                 <MultiSelect
                     label="Inwonergroep"
                     placeholder="Selecteer inwonergroepen"
@@ -166,7 +196,7 @@ export const SidebarFilters = ({
                     placeholder="Selecteer verslagsoort"
                     size="sm"
                     isDisabled={isLoading}
-                    items={options.verslagsoorten}
+                    items={draftVerslagsoorten}
                     selectedKey={selectedVerslagsoort}
                     onSelectionChange={onVerslagsoortChange}
                 >

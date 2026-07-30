@@ -268,7 +268,7 @@ export const Button: {
             return <a {...linkProps} href={href} rel="noopener noreferrer" />;
         }
 
-        return <Link {...linkProps} to={href} />;
+        return <Link search={true} {...linkProps} to={href} />;
     }
 
     return <AriaButton {...commonProps} type={commonProps.type || "button"} isPending={loading} />;

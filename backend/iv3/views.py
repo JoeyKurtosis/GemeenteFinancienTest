@@ -1,4 +1,4 @@
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -18,6 +18,13 @@ class FilterOptionsView(APIView):
     Gemeenten and verslagsoorten both depend on the year — municipalities merge, and a
     year only carries a Jaarrekening once it has been filed — so the client refetches
     this when the year changes.
+
+    `verslagsoortenPerJaar` is the exception, and carries every year at once. The sidebar has
+    to answer "does this year have a Jaarrekening?" for the year the user is *pointing at*,
+    before they press Toepassen and before anything has been refetched — otherwise the
+    Verslagsoort select only appears one apply too late. It is a few dozen bytes against a
+    round trip per dropdown, and the gemeenten list, which is the expensive part of this
+    payload, still follows the applied year.
     """
 
     # The dashboard is public; DRF defaults to IsAuthenticated.
@@ -28,7 +35,12 @@ class FilterOptionsView(APIView):
         jaren = sorted(per_jaar, reverse=True)
 
         if not jaren:
-            return Response({"jaren": [], "jaar": None, "gemeenten": [], "verslagsoorten": [], "inwonergroepen": [], "provincies": []})
+            return Response(
+                {
+                    "jaren": [], "jaar": None, "gemeenten": [], "verslagsoorten": [],
+                    "verslagsoortenPerJaar": {}, "inwonergroepen": [], "provincies": [],
+                }
+            )
 
         try:
             jaar = int(request.query_params.get("jaar", ""))
@@ -43,6 +55,10 @@ class FilterOptionsView(APIView):
                 "jaar": jaar,
                 "gemeenten": queries.gemeente_options(jaar),
                 "verslagsoorten": queries.verslagsoort_options(per_jaar[jaar]),
+                "verslagsoortenPerJaar": {
+                    str(elk_jaar): queries.verslagsoort_options(codes)
+                    for elk_jaar, codes in per_jaar.items()
+                },
                 "inwonergroepen": queries.inwonergroep_options(),
                 "provincies": queries.provincie_options(jaar),
             }
@@ -87,21 +103,8 @@ class ChartView(APIView):
         raise NotImplementedError
 
     def _resolve_verslagsoort(self, requested: str | None, jaar: int, per_jaar: dict) -> str | None:
-        """Pin the report to one the selected year actually carries.
-
-        The client sends a code for whichever year was selected before, and the newest
-        years only have a Begroting — so an unusable code is normal, not a bug. Prefer the
-        Jaarrekening, which is what actually happened, and fall back to the Begroting.
-        """
-        beschikbaar = per_jaar.get(jaar, [])
-        if requested in beschikbaar:
-            return requested
-
-        for voorkeur in (d.VERSLAGSOORT_JAARREKENING, d.VERSLAGSOORT_BEGROTING):
-            for code in sorted(beschikbaar):
-                if code.endswith(voorkeur):
-                    return code
-        return None
+        """See queries.resolve_verslagsoort — the assistant applies the same rule."""
+        return queries.resolve_verslagsoort(requested, jaar, per_jaar)
 
     @staticmethod
     def _codes(params, key: str) -> list[str]:
@@ -135,11 +138,23 @@ class GemeentelijkeStandView(ChartView):
     leeg = {"cohorten": [], "lijnen": {}, "verdeling": {}, "spuks": []}
 
     def chart(self, params, jaar, verslagsoort):
-        # No gemeente/referentie: this page's charts compare inwonergroepen and nothing else.
+        # The charts compare inwonergroepen, so `referentie` is not a cohort here but the
+        # report's Gemeente slicer: which municipalities count towards their class's average.
+        #
+        # The `alle` sentinel is left as "no filter" rather than resolved through
+        # _referentie, deliberately unlike every other page. There it stands for a
+        # referentiegroep whose membership has to hold still across the x-axis, so it becomes
+        # the selected year's codes. Here it stands for the country, and pinning it to one
+        # year's codes would drop every gemeente that has since merged out of existence from
+        # the earlier years of these lines.
+        referentie = self._codes(params, "referentie")
+        gemeenten = None if params.get("referentie") == REFERENTIE_ALLE else referentie or None
+
         return queries.gemeentelijke_stand(
             jaar=jaar,
             verslagsoort=verslagsoort,
             inwoner=self._codes(params, "inwoner"),
+            gemeenten=gemeenten,
             reserve=params.get("reserve") == "true",
         )
 
@@ -249,3 +264,129 @@ class ManagementoverzichtView(ChartView):
             referentie=self._referentie(params, jaar),
             reserve=params.get("reserve") == "true",
         )
+
+
+class DashboardSettingsView(APIView):
+    """GET/PUT the configurable dashboard parameters. Admin only."""
+
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        from iv3.settings_bridge import get_settings
+
+        s = get_settings()
+        return Response({
+            "cpi_per_jaar": s.CPI_PER_JAAR,
+            "cao_lonen_per_jaar": s.CAO_LONEN_PER_JAAR,
+            "inwonergroepen": s.INWONERGROEPEN,
+            "aggregation_method": s.AGGREGATION_METHOD,
+            "taakveld_label_overrides": s.TAAKVELD_LABEL_OVERRIDES,
+        })
+
+    def put(self, request):
+        from iv3.models import DashboardSettings
+        from iv3.serializers import DashboardSettingsSerializer
+
+        instance = DashboardSettings.load()
+        serializer = DashboardSettingsSerializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+
+class DashboardSettingsDefaultsView(APIView):
+    """Returns the hardcoded defaults from definitions.py so the frontend can offer a reset."""
+
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        return Response({
+            "cpi_per_jaar": d.CPI_PER_JAAR,
+            "cao_lonen_per_jaar": d.CAO_LONEN_PER_JAAR,
+            "inwonergroepen": d.INWONERGROEPEN,
+            "aggregation_method": "equal_weight",
+            "taakveld_label_overrides": d.TAAKVELD_LABEL_OVERRIDES,
+        })
+
+
+class MeasureListView(APIView):
+    """List all measures or create a new one. Admin only."""
+
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        from iv3.expression_eval import ALLOWED_FIELDS, FIELD_DESCRIPTIONS
+        from iv3.models import Measure
+        from iv3.serializers import MeasureSerializer
+
+        measures = Measure.objects.all()
+        fields = [
+            {"name": name, "description": FIELD_DESCRIPTIONS.get(name, "")}
+            for name in sorted(ALLOWED_FIELDS)
+        ]
+        return Response({
+            "measures": MeasureSerializer(measures, many=True).data,
+            "fields": fields,
+        })
+
+    def post(self, request):
+        from iv3.serializers import MeasureSerializer
+
+        serializer = MeasureSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=201)
+
+
+class MeasureDetailView(APIView):
+    """Get, update, or delete a single measure. Admin only."""
+
+    permission_classes = [IsAdminUser]
+
+    def get(self, request, key):
+        from iv3.models import Measure
+        from iv3.serializers import MeasureSerializer
+
+        try:
+            measure = Measure.objects.get(key=key)
+        except Measure.DoesNotExist:
+            return Response({"detail": "Measure niet gevonden."}, status=404)
+        return Response(MeasureSerializer(measure).data)
+
+    def put(self, request, key):
+        from iv3.models import Measure
+        from iv3.serializers import MeasureSerializer
+
+        try:
+            measure = Measure.objects.get(key=key)
+        except Measure.DoesNotExist:
+            return Response({"detail": "Measure niet gevonden."}, status=404)
+
+        serializer = MeasureSerializer(measure, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+    def delete(self, request, key):
+        from iv3.models import Measure
+
+        try:
+            measure = Measure.objects.get(key=key)
+        except Measure.DoesNotExist:
+            return Response({"detail": "Measure niet gevonden."}, status=404)
+        measure.delete()
+        return Response(status=204)
+
+
+class MeasureResetView(APIView):
+    """Reset all measures to their system defaults. Admin only."""
+
+    permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        from django.core.management import call_command
+        from iv3.models import Measure
+
+        Measure.objects.all().delete()
+        call_command("init_measures")
+        return Response({"detail": "Measures hersteld naar standaardwaarden."})

@@ -77,7 +77,7 @@ export const NavButton = ({
     <Tooltip isDisabled={!label} title={label} placement={tooltipPlacement}>
       <Pressable>
         {href && !isExternal ? (
-          <Link to={href} aria-label={label} onClick={onClick} className={buttonClassName}>
+          <Link to={href} search={true} aria-label={label} onClick={onClick} className={buttonClassName}>
             {content}
           </Link>
         ) : (

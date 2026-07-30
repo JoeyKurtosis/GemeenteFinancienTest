@@ -1,4 +1,6 @@
+import { Navigate } from "@tanstack/react-router";
 import { Tabs } from "@/components/application/tabs/tabs";
+import { useAuth } from "@/features/auth";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { AccountHeader } from "./account-header";
 import { PasswordSection } from "./password-section";
@@ -6,6 +8,12 @@ import { ProfileSection } from "./profile-section";
 
 export function AccountRouteView() {
     useDocumentTitle("Account");
+
+    const { isAuthenticated, isLoading } = useAuth();
+
+    if (!isLoading && !isAuthenticated) {
+        return <Navigate to="/login" />;
+    }
 
     return (
         <div className="mx-auto flex w-full flex-col">

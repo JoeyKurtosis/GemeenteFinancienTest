@@ -83,6 +83,8 @@ export interface BegrotingKaart {
     series: ChartSeries[];
     chartType: ChartType;
     valueFormat: ValueFormat;
+    /** The end-of-bar totals; see VerdelingPayload.totalen. */
+    totals?: number[];
 }
 
 export interface BegrotingPagina {
@@ -102,6 +104,7 @@ const bar = (
     series: verdelingSeries(verdeling),
     chartType: "horizontal-bar",
     valueFormat,
+    totals: verdeling?.totalen,
 });
 
 /**

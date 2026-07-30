@@ -24,9 +24,32 @@ BEDRAG_FACTOR = 1000
 BALANSPOST_PREFIXES = ("A", "P")
 
 # Mutations of the reserves are a taakveld like any other, which is what the sidebar's
-# reservemutaties toggle switches on. 0.11 is the resulting saldo — counting it alongside
-# the lasten and baten it is derived from would double the result.
+# reservemutaties toggle switches on.
 TAAKVELD_RESERVEMUTATIES = "0.10"
+
+# 0.11 is the saldo of the very rows the rest of this module adds up, and the two sides of it are
+# treated differently — deliberately, and not symmetrically:
+#
+#   * Its LASTEN are a surplus booked to close the begroting. Counting them alongside the lasten
+#     they are derived from would add a gemeente's begrotingsresultaat to its spending, so
+#     _AGGREGATE drops them and _RESULTAAT reads them into their own column for the one page that
+#     draws them (Iv3Summary.resultaat_lasten_per_hoofdcategorie).
+#
+#   * Its BATEN are the mirror image — a deficit booked as income — and are kept, landing in
+#     `baten` and in the residual bron like any other B row. Analytically that is the same
+#     objection as above; it is kept anyway because it is what the report counts, and the Baten
+#     and Begroting pages are read against the report.
+#
+# That asymmetry is the report's, established by measurement rather than assumed. Against the old
+# dashboard's Baten page (Aa en Hunze, 2024 Begroting, reservemutaties on) the per-gemeente
+# shortfall in `baten` was exactly 0.11's baten — Assen EUR 361/inw, Schiermonnikoog 73,
+# Vlaardingen 11, and zero for the fifteen of eighteen gemeenten that already agreed to the euro.
+# Adding them back reproduces the referentiegroep's baten to within EUR 0,50 per inwoner in 2018,
+# 2020, 2022 and 2024 alike. The lasten stay out on the same evidence: the referentiegroep's
+# uitgaven read EUR 3.657/inw on both dashboards, and folding 0.11's lasten in would make it 3.679.
+#
+# The cost of that faithfulness is that on this page baten and lasten no longer close against each
+# other: the Begroting page's resultaat row is the saldo *plus* whatever 0.11 carries.
 TAAKVELD_RESULTAAT = "0.11"
 
 # The sociaal domein subdivides its taakvelden a level deeper than the rest, and has done it
@@ -161,13 +184,32 @@ BALANS_PASSIVA_PREFIX = "^P"
 # `min` is inclusive and `max` exclusive; null is unbounded on that side. G4 is picked by
 # code instead, and overlaps "> 100.000" on purpose — the four big cities are also large,
 # and are drawn as their own line because they behave nothing like the rest of that group.
+#
+# The bounds are the report's, read off gemeenten[Inwonergroep] in the .pbix:
+#
+#   SWITCH(TRUE(), Inwoneraantal <  25000, "<25k",
+#                  Inwoneraantal <=  50000, "25k - 50k",
+#                  Inwoneraantal <= 100000, "50k - 100k",
+#                  Inwoneraantal <= 300000, ">100k",
+#                                           "G4")
+#
+# Note the asymmetry, which is the report's and not a typo here: the first cut is exclusive and
+# every later one inclusive, so a gemeente of exactly 50.000 is in "25.000 – 50.000" and one of
+# exactly 100.000 is in "50.000 – 100.000". That reads the way the labels do, which the earlier
+# all-exclusive bounds did not — they put exactly 100.000 inhabitants in "> 100.000". Expressed
+# below as exclusive maxima, hence the +1.
+#
+# G4 is the report's residual class, everything above 300.000. Kept as four codes rather than a
+# size bound because that is what the class means, but the two only agree while no fifth city
+# passes 300.000 — Eindhoven, the next largest, is around 250.000. If one does, the report would
+# have moved it into G4 automatically and this will not.
 G4_GM_CODES = ("GM0363", "GM0599", "GM0518", "GM0344")  # Amsterdam, Rotterdam, Den Haag, Utrecht
 
 INWONERGROEPEN = [
     {"id": "lt25", "label": "< 25.000", "min": None, "max": 25_000},
-    {"id": "25tot50", "label": "25.000 – 50.000", "min": 25_000, "max": 50_000},
-    {"id": "50tot100", "label": "50.000 – 100.000", "min": 50_000, "max": 100_000},
-    {"id": "gt100", "label": "> 100.000", "min": 100_000, "max": None},
+    {"id": "25tot50", "label": "25.000 – 50.000", "min": 25_000, "max": 50_001},
+    {"id": "50tot100", "label": "50.000 – 100.000", "min": 50_001, "max": 100_001},
+    {"id": "gt100", "label": "> 100.000", "min": 100_001, "max": None},
     {"id": "g4", "label": "G4", "gm_codes": G4_GM_CODES},
 ]
 
@@ -219,6 +261,12 @@ HOOFDCATEGORIE_LABELS = {
 # baten for the 2023 Jaarrekening. sync_iv3_summary keeps that identity true per gemeente and
 # checks it on every run (_baten_gaan_op) — it is what makes each donut's slices add up to the
 # figure printed in its centre.
+#
+# The partition survives taakveld 0.11's baten being let into `baten` (see TAAKVELD_RESULTAAT):
+# they are an ordinary B row and _accumulate routes them into the residual like any other. The
+# four *figures* do not — only "overig" and the total move, and only they need rechecking once
+# the warehouse has been re-read. Estimated off the closing identity at roughly 640 -> 671 and
+# 4317 -> 4348 for this report; measure them rather than trust that arithmetic.
 BATEN_BRON_LABELS = {
     "rijk": "Rijk",  # EUR 2312/inw
     "spuks": "Overige baten rijk",  # EUR 655/inw
@@ -226,24 +274,43 @@ BATEN_BRON_LABELS = {
     "overig": "Overige inkomsten",  # EUR 640/inw
 }
 
-# The lokale heffingen split, keyed by the categorie codes of
-# CATEGORIEEN_BATEN_LOKALE_HEFFINGEN. Labels as the report's own bar chart writes them.
-BATEN_HEFFINGEN_LABELS = {
-    "B2.2.1": "2.2.1 Belastingen op producenten",
-    "B2.2.2": "2.2.2 Belastingen op huishoudens",
-    "B3.7": "3.7 Leges en andere rechten",
+# The heffingen by taakveld, which is the cut that says what a heffing *is*. The categorie cut
+# beside it (CATEGORIEEN_BATEN_LOKALE_HEFFINGEN: B2.2.1 Belastingen op producenten, B2.2.2
+# Belastingen op huishoudens, B3.7 Leges en andere rechten) only says who was taxed and under
+# which heading it was booked, which is why no chart splits by it — see BATEN_PAGINAS.
+#
+# The mapping is the report's, and every code was read off the warehouse's own taakveld labels
+# rather than assumed (jaar 2024, verslagsoort 2024X005). Two taakvelden make one OZB because
+# the report draws one bar for it; woningen and niet-woningen are the same tax.
+#
+# Note this cuts *across* the three heffingen categorieën. Riolering carries EUR 1,60 mrd under
+# B2.2.2, EUR 386 mln under B2.2.1 and EUR 7 mln under B3.7, and all of it is the rioolheffing —
+# which is exactly why this cannot be derived from baten_heffingen_per_categorie.
+BATEN_HEFFINGEN_TAAKVELDEN = {
+    "0.61": "Onroerendezaakbelasting",  # OZB woningen
+    "0.62": "Onroerendezaakbelasting",  # OZB niet-woningen
+    "0.63": "Parkeerbelasting",
+    "7.2": "Rioolheffing",
+    "7.3": "Afvalheffing",
 }
 
-# The hoofdcategorieën the Overige inkomsten donut splits into: HOOFDCATEGORIE_LABELS without
-# the salarissen. A gemeente is not paid a salary — 1 is a cost categorie, and it never occurs
-# as a baat anywhere in the warehouse (checked over every jaar and verslagsoort), so leaving it
-# in would only put a permanently empty slice in the legend. The rest are all reachable, 7
-# included: the reservemutaties the sidebar toggle folds in are booked there almost to the euro
-# (EUR 491/inw of the 491), and they land in this bron. Defined here rather than inline so the
-# donut and the labels beside it cannot drift apart.
-BATEN_OVERIG_HOOFDCATEGORIE_LABELS = {
-    code: label for code, label in HOOFDCATEGORIE_LABELS.items() if code != "1"
-}
+# Everything not in BATEN_HEFFINGEN_TAAKVELDEN: bouwleges on 8.3, burgerzaken on 0.2, and a long
+# tail besides. A residual rather than a list, so the bar's segments always sum to its total.
+BATEN_HEFFINGEN_OVERIG_LABEL = "Overige belastingen en leges"
+
+# The two overige-baten categorieën the Overige inkomsten bar names, and their CBS labels
+# (Vraagbaak IV3 Gemeenten: 3.1 Grond, 3.3 Pachten, 3.6 Huren). Pachten and huren are drawn as
+# one slice, as the report draws them.
+CATEGORIE_BATEN_GROND = "B3.1"
+CATEGORIEEN_BATEN_HUREN_PACHTEN = ("B3.6", "B3.3")
+CATEGORIEEN_BATEN_GROND_HUREN = (CATEGORIE_BATEN_GROND, *CATEGORIEEN_BATEN_HUREN_PACHTEN)
+
+# The two hoofdcategorieën the Overige inkomsten bar names whole, rather than by categorie.
+# B7.1 sits almost entirely on taakveld 0.10 (EUR 8,69 mrd of 8,72 mrd in the 2024 Jaarrekening),
+# which is what makes hoofdcategorie 7 readable as "bijdragen uit reserves"; B5.1 en B5.2 are
+# rente and dividenden and sit on 0.5 Treasury.
+HOOFDCATEGORIE_RESERVES = "7"
+HOOFDCATEGORIE_RENTE = "5"
 
 # ── Taakveldnamen ───────────────────────────────────────────────────────────────────
 #
@@ -266,6 +333,10 @@ BATEN_OVERIG_HOOFDCATEGORIE_LABELS = {
 TAAKVELD_LABEL_OVERRIDES = {
     # Completed: the warehouse's own name, cut off at ~40 characters. Prefix-checked.
     "0.7": "Algemene uitkeringen en overige uitkeringen gemeentefonds",
+    # Named because the Lasten detail page for hoofdtaakveld 0 draws it as a slice, which no
+    # other page does — see queries._resultaat_lasten. Without this it falls out of Iv3Taakveld
+    # on the truncation check and the slice would have no label to appear under.
+    "0.11": "Resultaat van de rekening van baten en lasten",
     "5.3": "Cultuurpresentatie, cultuurproductie en cultuurparticipatie",
     "5.7": "Openbaar groen en (openlucht) recreatie",
     "6.23": "Toegang en eerstelijnsvoorz. Integraal",
@@ -283,6 +354,8 @@ TAAKVELD_LABEL_OVERRIDES = {
 # for a stem to check them against. 6.73/6.74 are the 2024-and-earlier scheme, 6.75/6.76/6.79
 # the one from 2025 — which is why both a 6.73 and a 6.76 mean "Jeugdhulp met verblijf": they
 # are the same money under two numberings, and no year carries both.
+# All of these sit in hoofdtaakveld TAAKVELD_SOCIAAL_DOMEIN, which is what lets the Begroting
+# page take them out of it — see queries.UITGAVEN_HOOFDTAAKVELDEN.
 TAAKVELD_LABELS_ZONDER_BRON = ("6.73", "6.74", "6.75", "6.76", "6.79")
 
 
@@ -306,10 +379,26 @@ HOOFDTAAKVELD_LABELS = {
 # CBS series. Both are annual averages, and both get re-based to the first year on the
 # chart before they are drawn — the absolute base below does not matter, only the ratios.
 #
-# UNVERIFIED: these figures were entered from memory and have not been checked against
-# StatLine. They are the right order of magnitude and carry the right shape (the 2022
-# energy spike is there), but treat them as placeholders until someone downloads the
-# tables. Everything else in this module was validated against the warehouse; this was not.
+# These figures were entered from memory rather than downloaded. Neither has been checked
+# against StatLine itself, but both now have a second opinion: the .pbix carried an embedded
+# `Inflatie CBS` table, and rebasing the two series below to 2018 = 100 puts them beside it as
+#
+#              2019     2020     2021     2022     2023
+#   CPI here  102,71   104,06   106,87   117,80   122,44
+#   report    102,60   103,93   106,74   117,41   121,88   <- within 0,6 index points
+#
+#   CAO here  102,60   104,17   106,35   109,69   116,25
+#   report    102,40   104,86   107,29   109,44   110,97   <- 5,3 apart by 2023
+#
+# So CPI_PER_JAAR is corroborated — two independent sources agreeing to within half a point,
+# 2022 energy spike and all. Treat it as sound rather than provisional.
+#
+# CAO_LONEN_PER_JAAR is a deliberate divergence, not an error. The report's "inkomensinflatie"
+# is a smooth ~2%/jaar series that never sees the 2023 wage round; real CAO-lonen rose about 6%
+# that year, which is the whole point of laying this over the personeelskosten. The old
+# dashboard's personeel index therefore cannot be reproduced from here, and should not be —
+# and unlike the report's series, which stops at 2023, this one covers the years the dashboard
+# actually draws. Still worth replacing with a downloaded 85995NED when someone has the time.
 #
 # Consumentenprijsindex, 2015 = 100. CBS StatLine 83131NED.
 CPI_PER_JAAR = {

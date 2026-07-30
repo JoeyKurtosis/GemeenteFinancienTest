@@ -1,9 +1,14 @@
 import { ChartCardWithDetails } from "@/components/charts/chart-card-with-details";
+import { useFilters } from "@/features/filters";
 import { useManagementoverzicht } from "../hooks/use-managementoverzicht";
 import { managementoverzichtPagina } from "./managementoverzicht-charts";
 
+/** The heading before a verslagsoort is known, and the fallback while one is being fetched. */
+const STANDAARD_TOTALEN_KOP = "Complete Begroting";
+
 export function ManagementoverzichtRouteView() {
     const { data, isLoading, error } = useManagementoverzicht();
+    const { options } = useFilters();
 
     if (error) {
         return (
@@ -16,11 +21,19 @@ export function ManagementoverzichtRouteView() {
 
     const pagina = managementoverzichtPagina(data);
 
+    // The verslagsoort the payload was actually drawn from, not the one the sidebar asked for:
+    // ChartView._resolve_verslagsoort may substitute another code for a year that has none.
+    // Labelled off the filter options rather than from a suffix table of its own, so "Begroting"
+    // and "Jaarrekening" are spelled in exactly one place — the backend's VERSLAGSOORT_LABELS.
+    const totalenKop = options.verslagsoorten.find((optie) => optie.id === data?.verslagsoort)?.label;
+
     return (
         <section className="space-y-10">
-            {/* ── Complete Begroting ── */}
+            {/* ── Complete Begroting / Complete Jaarrekening ── */}
             <div className="space-y-6">
-                <h2 className="pb-2 text-display-xs font-semibold text-primary">Complete Begroting</h2>
+                <h2 className="pb-2 text-display-xs font-semibold text-primary">
+                    {totalenKop ? `Complete ${totalenKop}` : STANDAARD_TOTALEN_KOP}
+                </h2>
 
                 {pagina.begroting.map((kaart) => (
                     <ChartCardWithDetails key={kaart.title} {...kaart} isLoading={isLoading} expandable />
