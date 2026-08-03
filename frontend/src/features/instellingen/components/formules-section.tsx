@@ -29,13 +29,13 @@ export function FormulesSection() {
     }, [loadMeasures]);
 
     async function handleReset() {
-        if (!confirm("Weet je zeker dat je alle formules wilt herstellen naar de standaardwaarden?")) {
+        if (!confirm("Alle standaardformules terugzetten naar hun oorspronkelijke waarde? Zelf toegevoegde formules blijven ongewijzigd.")) {
             return;
         }
         try {
             await resetMeasures();
             await loadMeasures();
-            showToast("success", "Hersteld", "Alle formules zijn teruggezet naar de standaardwaarden.");
+            showToast("success", "Hersteld", "De standaardformules staan weer op hun oorspronkelijke waarde.");
         } catch {
             showToast("error", "Fout", "Herstellen mislukt.");
         }
@@ -67,7 +67,11 @@ export function FormulesSection() {
             <hr className="border-secondary" />
 
             <div className="rounded-xl border border-secondary bg-secondary p-4">
-                <h3 className="mb-2 text-sm font-semibold text-primary">Beschikbare velden</h3>
+                <h3 className="text-sm font-semibold text-primary">Beschikbare velden</h3>
+                <p className="mb-3 text-xs text-tertiary">
+                    Alle bedragen zijn in duizenden euro's voor de hele gemeente. De omrekening naar euro's per inwoner gebeurt automatisch, ná de
+                    formule — deel dus niet zelf door <code className="font-mono">inwoners</code>.
+                </p>
                 <div className="grid gap-1 sm:grid-cols-2">
                     {fields.map((field) => (
                         <div key={field.name} className="flex items-baseline gap-2">

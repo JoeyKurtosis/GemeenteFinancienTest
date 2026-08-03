@@ -10,8 +10,6 @@ import {
     ModalOverlay as AriaModalOverlay,
 } from "react-aria-components";
 import Logo from "@/assets/icons/logo_venster.svg?react";
-import LogoMini from "@/assets/icons/logo_venster_mobile.svg?react";
-import { UntitledLogo } from "@/components/foundations/logo/untitledui-logo";
 import { cx } from "@/utils/cx";
 
 export const MobileNavigationHeader = ({ children }: PropsWithChildren) => {

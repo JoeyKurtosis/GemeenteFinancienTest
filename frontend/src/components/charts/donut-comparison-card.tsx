@@ -23,7 +23,19 @@ interface DonutComparisonCardProps {
     className?: string;
 }
 
-function Donuts({ left, right, categories, height }: { left: DonutSide; right: DonutSide; categories: { name: string; color: string }[]; height?: number }) {
+function Donuts({
+    left,
+    right,
+    categories,
+    height,
+    showSliceLabels,
+}: {
+    left: DonutSide;
+    right: DonutSide;
+    categories: { name: string; color: string }[];
+    height?: number;
+    showSliceLabels?: boolean;
+}) {
     // Clicking a legend row singles that category out on both rings at once — the two are
     // read against each other, so fading one side alone would defeat the comparison.
     // Clicking it again, or clicking another row, moves the highlight. Nothing is filtered
@@ -45,8 +57,22 @@ function Donuts({ left, right, categories, height }: { left: DonutSide; right: D
                 className="gap-1.5 pl-0"
             />
             <div className="grid flex-1 grid-cols-1 gap-6 sm:grid-cols-2">
-                <DonutChart data={left.data} centerValue={left.centerValue} centerLabel={left.label} activeKey={activeKey} height={height} />
-                <DonutChart data={right.data} centerValue={right.centerValue} centerLabel={right.label} activeKey={activeKey} height={height} />
+                <DonutChart
+                    data={left.data}
+                    centerValue={left.centerValue}
+                    centerLabel={left.label}
+                    activeKey={activeKey}
+                    height={height}
+                    showSliceLabels={showSliceLabels}
+                />
+                <DonutChart
+                    data={right.data}
+                    centerValue={right.centerValue}
+                    centerLabel={right.label}
+                    activeKey={activeKey}
+                    height={height}
+                    showSliceLabels={showSliceLabels}
+                />
             </div>
         </div>
     );
@@ -78,7 +104,9 @@ export function DonutComparisonCard({ title, categories, left, right, expandable
             {expandable && (
                 <DialogTrigger isOpen={isExpanded} onOpenChange={setIsExpanded}>
                     <ModalOverlay>
-                        <Modal className="max-w-5xl">
+                        {/* Wider than the other expanded charts: the slice labels sit beside the
+                            rings, so the width they take is width the rings do not get. */}
+                        <Modal className="max-w-7xl">
                             <Dialog className="flex-col">
                                 <div className="w-full rounded-xl bg-primary p-6 shadow-lg">
                                     <div className="mb-4 flex items-center justify-between">
@@ -91,7 +119,7 @@ export function DonutComparisonCard({ title, categories, left, right, expandable
                                             <XClose className="size-5" aria-hidden="true" />
                                         </button>
                                     </div>
-                                    <Donuts left={left} right={right} categories={categories} height={360} />
+                                    <Donuts left={left} right={right} categories={categories} height={360} showSliceLabels />
                                 </div>
                             </Dialog>
                         </Modal>

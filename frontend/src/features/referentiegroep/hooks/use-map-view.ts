@@ -23,6 +23,15 @@ const SLEEP_DREMPEL = 4;
 const REGELS_NAAR_PIXELS = 16;
 /** How much of the frame a zoom-to-fit fills, leaving the province a margin to breathe in. */
 const VULLING = 0.85;
+/**
+ * How far past its own edge the map may be dragged, as a fraction of the map's size.
+ *
+ * Without this the pan range collapses to a point at k = 1 — the content exactly covers the
+ * frame, so there is nowhere to go — and the map is only draggable once zoomed. The margin
+ * gives the same slack at every scale: enough to shift the country aside and read what the
+ * zoom controls or the tooltip were covering, never enough to lose it off the edge.
+ */
+const SLEEP_MARGE = 0.3;
 
 export interface MapView {
     k: number;
@@ -53,16 +62,19 @@ const meetVerhouding = (rect: DOMRect) => {
 };
 
 /**
- * Keep the content covering the viewport: the map can be zoomed into but never dragged off
- * its own edge. Content spans [tx, tx + k·W], which covers [0, W] exactly when
- * tx ∈ [-(k-1)·W, 0]. At k = 1 that collapses to tx = 0, so reset needs no special case.
+ * Keep the content roughly over the viewport: the map can be dragged aside but never off.
+ * Content spans [tx, tx + k·W], which covers [0, W] exactly when tx ∈ [-(k-1)·W, 0] — a range
+ * that is empty at k = 1. Widening it by SLEEP_MARGE on both ends is what makes the map
+ * draggable at every scale rather than only once zoomed in.
  */
 const klemView = ({ k, tx, ty }: MapView): MapView => {
     const nieuweK = klem(k, MIN_K, MAX_K);
+    const margeX = MAP_WIDTH * SLEEP_MARGE;
+    const margeY = MAP_HEIGHT * SLEEP_MARGE;
     return {
         k: nieuweK,
-        tx: klem(tx, -(nieuweK - 1) * MAP_WIDTH, 0),
-        ty: klem(ty, -(nieuweK - 1) * MAP_HEIGHT, 0),
+        tx: klem(tx, -(nieuweK - 1) * MAP_WIDTH - margeX, margeX),
+        ty: klem(ty, -(nieuweK - 1) * MAP_HEIGHT - margeY, margeY),
     };
 };
 
@@ -193,6 +205,9 @@ export function useMapView(wrapperRef: RefObject<HTMLDivElement | null>) {
         transform: `translate(${view.tx} ${view.ty}) scale(${view.k})`,
         kanUitzoomen: view.k > MIN_K,
         kanInzoomen: view.k < MAX_K,
+        // Panning at k = 1 is now possible, so "zoomed out" no longer means "already reset" —
+        // without the offsets here a map dragged aside at 1x would have no way back.
+        kanHerstellen: view.k > MIN_K || view.tx !== 0 || view.ty !== 0,
         zoomIn: () => zoomMet(ZOOM_STAP),
         zoomUit: () => zoomMet(1 / ZOOM_STAP),
         reset,

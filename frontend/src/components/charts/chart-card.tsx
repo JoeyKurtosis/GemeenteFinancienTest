@@ -152,7 +152,7 @@ export function ChartCard({
                                     </div>
                                     {/* Expanding is what you do to see the long list, so the
                                         cap is roomier here — it still scrolls, in a taller box. */}
-                                    <ChartContent {...chartContentProps} height={500} maxHeight={maxHeight ? 560 : undefined} />
+                                    <ChartContent {...chartContentProps} height={500} maxHeight={maxHeight ? 560 : undefined} expanded />
                                 </div>
                             </Dialog>
                         </Modal>
@@ -178,6 +178,12 @@ interface ChartContentProps {
     totals?: number[];
     height?: number;
     maxHeight?: number;
+    /**
+     * Drawn in the expand modal rather than in the card. `line` charts mark every point with a
+     * dot and print its figure beside it — worth the ink at full size, too dense for the card,
+     * where fourteen of these sit on a page at 300px each.
+     */
+    expanded?: boolean;
 }
 
 export function ChartContent({
@@ -193,6 +199,7 @@ export function ChartContent({
     totals,
     height = 300,
     maxHeight,
+    expanded = false,
 }: ChartContentProps) {
     const reversedSeries = [...series].reverse();
     const format = (value: unknown) => formatValue(value, valueFormat);
@@ -230,14 +237,17 @@ export function ChartContent({
         />
     ) : undefined;
 
+    const isBarChart = chartType === "bar" || chartType === "horizontal-bar";
+
     const tooltip = (
         <Tooltip
-            content={<ChartTooltipContent formatter={format} />}
-            cursor={
-                chartType === "bar" || chartType === "horizontal-bar"
-                    ? { fill: "var(--color-bg-secondary)", radius: 4 }
-                    : { stroke: "var(--color-border-secondary)" }
-            }
+            // A bar stacks its series into one column, and the segment under the pointer is
+            // the one being asked about — reciting the whole stack buries it. A line or area
+            // is read the other way round: the series are compared at that point on the axis,
+            // so those keep the shared tooltip.
+            shared={!isBarChart}
+            content={<ChartTooltipContent formatter={format} showSeriesName={isBarChart} labelKey={xAxisKey} />}
+            cursor={isBarChart ? { fill: "var(--color-bg-secondary)", radius: 4 } : { stroke: "var(--color-border-secondary)" }}
         />
     );
 
@@ -403,10 +413,63 @@ export function ChartContent({
 
     const grid = <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-tertiary)" vertical={false} />;
 
+    // The two trend shapes — `line` and `area` — mark every point and print its figure once
+    // expanded. Shared between them because they are the same chart to read: a handful of years
+    // across a few cohorts, where the question is what a given year actually was.
+    //
+    // Which series runs highest at each point decides whether its figure goes above the line or
+    // below, so that two series meeting — the moment the chart is read most closely — do not
+    // stack their labels on one another.
+    const hoogsteReeks = expanded
+        ? data.map((entry) => {
+              let hoogste: string | undefined;
+              let waarde = -Infinity;
+              for (const s of series) {
+                  const eigen = Number(entry[s.key]);
+                  if (Number.isFinite(eigen) && eigen > waarde) {
+                      waarde = eigen;
+                      hoogste = s.key;
+                  }
+              }
+              return hoogste;
+          })
+        : [];
+
+    const puntDot = (s: ChartSeries) => (expanded ? { r: 3.5, fill: s.color, strokeWidth: 0, fillOpacity: isDimmed(s.key) ? 0.2 : 1 } : false);
+
+    const puntLabels = (s: ChartSeries) =>
+        expanded ? (
+            <LabelList
+                dataKey={s.key}
+                content={({ x, y, index, value }) => {
+                    // A gap in the series — a cohort with no filing that year — has a dot at no
+                    // point, so it gets no figure either.
+                    if (value === null || value === undefined) return null;
+                    const boven = hoogsteReeks[index ?? 0] === s.key;
+                    return (
+                        <text
+                            x={x as number}
+                            y={(y as number) + (boven ? -12 : 20)}
+                            textAnchor="middle"
+                            fill="var(--color-text-tertiary)"
+                            fillOpacity={isDimmed(s.key) ? 0.2 : 1}
+                            fontSize={12}
+                        >
+                            {format(value)}
+                        </text>
+                    );
+                }}
+            />
+        ) : null;
+
+    // Room above for the topmost label, which sits outside the plot area and would otherwise be
+    // clipped by the container.
+    const trendMargin = expanded ? { top: 24, right: 16, bottom: 5, left: 5 } : undefined;
+
     if (chartType === "line") {
         return (
             <ResponsiveContainer width="100%" height={height}>
-                <LineChart data={data}>
+                <LineChart data={data} margin={trendMargin}>
                     {grid}
                     {xAxis}
                     {yAxis}
@@ -422,9 +485,11 @@ export function ChartContent({
                             strokeWidth={activeKey === s.key ? 3 : 2}
                             strokeOpacity={isDimmed(s.key) ? 0.2 : 1}
                             strokeDasharray={s.dashed ? "4 4" : undefined}
-                            dot={false}
+                            dot={puntDot(s)}
                             activeDot={{ r: 4 }}
-                        />
+                        >
+                            {puntLabels(s)}
+                        </Line>
                     ))}
                 </LineChart>
             </ResponsiveContainer>
@@ -458,7 +523,7 @@ export function ChartContent({
 
     return (
         <ResponsiveContainer width="100%" height={height}>
-            <AreaChart data={data}>
+            <AreaChart data={data} margin={trendMargin}>
                 {grid}
                 {xAxis}
                 {yAxis}
@@ -475,8 +540,10 @@ export function ChartContent({
                         fillOpacity={isDimmed(s.key) ? 0.02 : 0.08}
                         strokeWidth={activeKey === s.key ? 3 : 2}
                         strokeOpacity={isDimmed(s.key) ? 0.2 : 1}
-                        dot={false}
-                    />
+                        dot={puntDot(s)}
+                    >
+                        {puntLabels(s)}
+                    </Area>
                 ))}
             </AreaChart>
         </ResponsiveContainer>

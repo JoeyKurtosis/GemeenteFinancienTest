@@ -3,11 +3,12 @@
 import { type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight, FilterFunnel01 } from "@untitledui/icons";
-import { Button as AriaButton, Dialog as AriaDialog, DialogTrigger as AriaDialogTrigger, Popover as AriaPopover } from "react-aria-components";
+import { Dialog as AriaDialog, DialogTrigger as AriaDialogTrigger, Popover as AriaPopover } from "react-aria-components";
 import Logo from "@/assets/icons/logo_venster.svg?react";
 import LogoMini from "@/assets/icons/logo_venster_mobile.svg?react";
+import { Button } from "@/components/base/buttons/button";
 import { Tooltip } from "@/components/base/tooltip/tooltip";
-import { useFilters } from "@/features/filters";
+import { FilterSummary } from "@/features/filters";
 import { useSidebarCollapsed } from "@/hooks/use-sidebar-collapsed";
 import { cx } from "@/utils/cx";
 import { MobileNavigationHeader } from "../base-components/mobile-header";
@@ -15,7 +16,7 @@ import { NavAccountCard } from "../base-components/nav-account-card";
 import { NavButton } from "../base-components/nav-button";
 import { NavItemBase } from "../base-components/nav-item";
 import { NavList } from "../base-components/nav-list";
-import { SidebarFilters, type SidebarFiltersState } from "../base-components/sidebar-filters";
+import { SidebarFilters } from "../base-components/sidebar-filters";
 import type { NavItemType } from "../config";
 
 interface SidebarNavigationProps {
@@ -62,38 +63,6 @@ export const SidebarNavigationSimple = ({
 }: SidebarNavigationProps) => {
     const { collapsed, setCollapsed } = useSidebarCollapsed();
 
-    // Filter state lives in FiltersProvider (mounted in the layout) so the pages can read
-    // it too, and so the inline (expanded) and popover (collapsed) renderings stay in sync.
-    const {
-        selectedGemeente,
-        onGemeenteChange,
-        selectedReferentiegroepen,
-        onReferentiegroepenChange,
-        selectedInwonergroepen,
-        onInwonergroepenChange,
-        selectedVerslagsoort,
-        onVerslagsoortChange,
-        selectedJaar,
-        onJaarChange,
-        reservemutaties,
-        onReservemutatiesChange,
-    } = useFilters();
-
-    const filterState: SidebarFiltersState = {
-        selectedGemeente,
-        onGemeenteChange,
-        selectedReferentiegroepen,
-        onReferentiegroepenChange,
-        selectedInwonergroepen,
-        onInwonergroepenChange,
-        selectedVerslagsoort,
-        onVerslagsoortChange,
-        selectedJaar,
-        onJaarChange,
-        reservemutaties,
-        onReservemutatiesChange,
-    };
-
     /**
      * @param isCollapsed Render the compact icon rail. Always `false` on mobile.
      */
@@ -114,21 +83,14 @@ export const SidebarNavigationSimple = ({
                             <LogoMini className="h-9 w-auto" />
                         </Link>
 
+                        {/* No room for the summary on the rail — the popover carries the values. */}
                         <AriaDialogTrigger>
                             <Tooltip title="Filters" placement="right">
-                                <AriaButton
-                                    aria-label="Filters"
-                                    className="group/item flex size-9 cursor-pointer items-center justify-center rounded-md bg-primary shadow-xs ring-1 ring-primary outline-focus-ring transition duration-100 ease-linear select-none ring-inset hover:bg-primary_hover focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-2"
-                                >
-                                    <FilterFunnel01
-                                        aria-hidden="true"
-                                        className="size-5 shrink-0 text-fg-quaternary transition-inherit-all group-hover/item:text-fg-quaternary_hover"
-                                    />
-                                </AriaButton>
+                                <Button aria-label="Filters" color="secondary" size="sm" iconLeading={FilterFunnel01} />
                             </Tooltip>
                             <AriaPopover placement="right top" offset={8} crossOffset={-4} className={popoverAnimation}>
                                 <AriaDialog className="w-72 rounded-xl bg-primary p-4 shadow-lg ring-1 ring-secondary outline-hidden">
-                                    {({ close }) => <SidebarFilters {...filterState} onApply={close} />}
+                                    {({ close }) => <SidebarFilters onApply={close} />}
                                 </AriaDialog>
                             </AriaPopover>
                         </AriaDialogTrigger>
@@ -139,20 +101,23 @@ export const SidebarNavigationSimple = ({
                             <Logo className="h-11.25 text-[#133556] dark:text-white" />
                         </Link>
 
-                        <AriaDialogTrigger>
-                            <AriaButton className="group/item flex w-full cursor-pointer items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-secondary shadow-xs ring-1 ring-primary outline-focus-ring transition duration-100 ease-linear select-none ring-inset hover:bg-primary_hover hover:text-secondary_hover focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-2">
-                                <FilterFunnel01
-                                    aria-hidden="true"
-                                    className="size-5 shrink-0 text-fg-quaternary transition-inherit-all group-hover/item:text-fg-quaternary_hover"
-                                />
-                                Filters
-                            </AriaButton>
-                            <AriaPopover placement="right top" offset={28} crossOffset={-4} className={popoverAnimation}>
-                                <AriaDialog className="w-72 rounded-xl bg-primary p-4 shadow-lg ring-1 ring-secondary outline-hidden">
-                                    {({ close }) => <SidebarFilters {...filterState} onApply={close} />}
-                                </AriaDialog>
-                            </AriaPopover>
-                        </AriaDialogTrigger>
+                        <div className="flex flex-col gap-2.5">
+                            <AriaDialogTrigger>
+                                <Button color="secondary" size="sm" className="w-full justify-start" iconLeading={FilterFunnel01}>
+                                    Filters
+                                </Button>
+                                <AriaPopover placement="right top" offset={28} crossOffset={-4} className={popoverAnimation}>
+                                    <AriaDialog className="w-72 rounded-xl bg-primary p-4 shadow-lg ring-1 ring-secondary outline-hidden">
+                                        {({ close }) => <SidebarFilters onApply={close} />}
+                                    </AriaDialog>
+                                </AriaPopover>
+                            </AriaDialogTrigger>
+
+                            {/* What the charts are actually filtered to. Under the button rather
+                                than inside it: the values are read far more often than they are
+                                changed, and a control is a poor place to keep a label. */}
+                            <FilterSummary />
+                        </div>
                     </>
                 )}
             </div>

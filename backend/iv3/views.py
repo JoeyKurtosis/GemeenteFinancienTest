@@ -379,14 +379,17 @@ class MeasureDetailView(APIView):
 
 
 class MeasureResetView(APIView):
-    """Reset all measures to their system defaults. Admin only."""
+    """Reset the system-default measures to their shipped formulas. Admin only.
+
+    Only the keys in init_measures.DEFAULT_MEASURES are touched. This used to empty the whole
+    table before re-seeding, which reverted the defaults *and* destroyed every measure an admin
+    had created through POST /api/iv3/measures/ — there was no way back from the button.
+    """
 
     permission_classes = [IsAdminUser]
 
     def post(self, request):
         from django.core.management import call_command
-        from iv3.models import Measure
 
-        Measure.objects.all().delete()
-        call_command("init_measures")
-        return Response({"detail": "Measures hersteld naar standaardwaarden."})
+        call_command("init_measures", force=True)
+        return Response({"detail": "Standaardformules hersteld; eigen formules zijn ongemoeid gelaten."})

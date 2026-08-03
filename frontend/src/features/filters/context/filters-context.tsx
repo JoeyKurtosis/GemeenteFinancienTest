@@ -1,4 +1,5 @@
 import { type ReactNode, createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import type { Key, Selection } from "react-aria-components";
 import { type FilterOption, type FilterOptions, fetchFilterOptions } from "../api";
@@ -138,13 +139,31 @@ const isSameSearch = (a: FiltersSearch, b: FiltersSearch) =>
 
 const toSelection = (value?: string): Selection => (value === ALLE_SELECTIE ? "all" : value === GEEN_SELECTIE ? new Set<Key>() : new Set(parseCodes(value)));
 
+/**
+ * What `navigate` is here: a writer of this route's search params, and nothing else.
+ *
+ * The router cannot type it for us. Both calls below pass `search` without a `to`, which means
+ * "stay where you are and rewrite the query string" — but with no `to` and no `from` the router
+ * has no route to resolve the search schema against and types the option as `never`. That is the
+ * same bind `useSearch({ strict: false })` above is in, and for the same reason: this provider is
+ * mounted once in /_layout and runs on every page under it, so it belongs to no single route.
+ *
+ * Naming a route with `useNavigate({ from })` does not fix it and must not be used here. `from`
+ * is what a `to`-less navigate resolves its *destination* from — see buildLocation in
+ * router-core, where `nextTo` falls back to `from` when `to` is absent — so `from: "/"` type-
+ * checks and then silently sends anyone who applies a filter on /baten back to the dashboard.
+ * "/_layout" is not accepted at all, being a pathless route with no fullPath of its own.
+ *
+ * So: one cast, at the boundary, against the schema /_layout really does declare
+ * (validateSearch: validateFiltersSearch). The alternative is `as any` at both call sites, which
+ * would type the patches as unknown rather than as FiltersSearch.
+ */
+type SearchNavigate = (opts: { search: FiltersSearch | ((prev: FiltersSearch) => FiltersSearch); replace?: boolean }) => void;
+
 export const FiltersProvider = ({ children }: { children: ReactNode }) => {
     const search = useSearch({ strict: false }) as FiltersSearch;
-    const navigate = useNavigate();
+    const navigate = useNavigate() as unknown as SearchNavigate;
 
-    const [options, setOptions] = useState<FilterOptions>(EMPTY_OPTIONS);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
 
     // The URL holds the *applied* filters; `draft` holds what the sidebar shows. The two
     // only meet when the user presses "Toepassen" — that is what keeps the charts from
@@ -191,30 +210,24 @@ export const FiltersProvider = ({ children }: { children: ReactNode }) => {
 
     // Refetches whenever the applied year changes: the gemeente list shrinks over time
     // (388 in 2017, 342 today) and the newest year may not have a Jaarrekening yet.
-    useEffect(() => {
-        let isMounted = true;
+    //
+    // Keyed by year and cached, so stepping back to a year already visited answers from memory.
+    // That matters more here than it looks: this request gates every chart on the page (see
+    // isReady below), so a year change used to mean two round trips in series before a single
+    // figure could be drawn. Now only a year never opened before pays for the first of them.
+    const optionsQuery = useQuery({
+        queryKey: ["filter-options", jaar ?? null],
+        queryFn: ({ signal }) => fetchFilterOptions(jaar ?? null, signal),
+        // Deliberately no placeholderData: it would flip the query to "success" before the
+        // options existed, and isReady below reads isLoading to decide whether the charts may
+        // query yet — they would all fire against an empty gemeente list.
+    });
 
-        const loadOptions = async () => {
-            setIsLoading(true);
-            try {
-                const next = await fetchFilterOptions(jaar ?? null);
-                if (!isMounted) return;
-                setOptions(next);
-                setError(null);
-            } catch {
-                if (!isMounted) return;
-                setOptions(EMPTY_OPTIONS);
-                setError("Filters konden niet worden geladen");
-            } finally {
-                if (isMounted) setIsLoading(false);
-            }
-        };
-
-        loadOptions();
-        return () => {
-            isMounted = false;
-        };
-    }, [jaar]);
+    // The empty set of options is what the sidebar renders while loading, and what the
+    // corrections pass prunes against on a failure — never undefined.
+    const options = optionsQuery.isError ? EMPTY_OPTIONS : (optionsQuery.data ?? EMPTY_OPTIONS);
+    const isLoading = optionsQuery.isPending;
+    const error = optionsQuery.isError ? "Filters konden niet worden geladen" : null;
 
     // Everything that has to be true of the URL before a page may query with it: the defaults
     // that make the dashboard open on a complete view, and the pruning of selections that are
@@ -339,52 +352,60 @@ export const FiltersProvider = ({ children }: { children: ReactNode }) => {
         [options.verslagsoortenPerJaar, options.verslagsoorten, draft.jaar],
     );
 
-    const value: FiltersContextValue = {
-        options,
-        isLoading,
-        error,
-        isReady,
-        applied,
+    // Memoized because everything under this provider consumes it, charts included. Every
+    // sidebar interaction moves the draft, and a fresh object literal here handed all of them a
+    // new context value — re-rendering all fourteen recharts trees on Gemeentelijke Stand on
+    // every keystroke, long before anyone pressed Toepassen. Nothing refetched (the queries key
+    // off the applied filters, not the draft), but the render was paid all the same.
+    const value = useMemo<FiltersContextValue>(
+        () => ({
+            options,
+            isLoading,
+            error,
+            isReady,
+            applied,
 
-        selectedGemeente: draft.gemeente ?? null,
-        onGemeenteChange: (key) => setDraftValue({ gemeente: key ? String(key) : undefined }),
+            selectedGemeente: draft.gemeente ?? null,
+            onGemeenteChange: (key) => setDraftValue({ gemeente: key ? String(key) : undefined }),
 
-        selectedReferentiegroepen: toSelection(draft.referentie),
-        // The "Alles" row hands back every gemeente as an explicit set; serializeSelectie
-        // collapses that back into the sentinel so it round-trips as `referentie=alle`.
-        onReferentiegroepenChange: (keys) => setDraftValue({ referentie: serializeSelectie(keys, options.gemeenten) }),
+            selectedReferentiegroepen: toSelection(draft.referentie),
+            // The "Alles" row hands back every gemeente as an explicit set; serializeSelectie
+            // collapses that back into the sentinel so it round-trips as `referentie=alle`.
+            onReferentiegroepenChange: (keys) => setDraftValue({ referentie: serializeSelectie(keys, options.gemeenten) }),
 
-        selectedInwonergroepen: toSelection(draft.inwoner),
-        onInwonergroepenChange: (keys) => setDraftValue({ inwoner: serializeSelectie(keys, options.inwonergroepen) }),
+            selectedInwonergroepen: toSelection(draft.inwoner),
+            onInwonergroepenChange: (keys) => setDraftValue({ inwoner: serializeSelectie(keys, options.inwonergroepen) }),
 
-        draftVerslagsoorten,
-        selectedVerslagsoort: draft.verslagsoort ?? null,
-        onVerslagsoortChange: (key) => setDraftValue({ verslagsoort: key ? String(key) : undefined }),
+            draftVerslagsoorten,
+            selectedVerslagsoort: draft.verslagsoort ?? null,
+            onVerslagsoortChange: (key) => setDraftValue({ verslagsoort: key ? String(key) : undefined }),
 
-        selectedJaar: draft.jaar ? String(draft.jaar) : null,
-        // The verslagsoort moves with the year, in the draft as well as in the URL. Without it
-        // the select would sit on a code belonging to the year the user just left — unmatched by
-        // any of its items, so blank — and the corrections pass would only sort that out one
-        // Toepassen later. Same rule the corrections pass applies; see herpuntVerslagsoort.
-        onJaarChange: (key) => {
-            const nieuwJaar = key ? Number(key) : undefined;
-            const opties = nieuwJaar ? (options.verslagsoortenPerJaar[String(nieuwJaar)] ?? []) : [];
-            setDraftValue({
-                jaar: nieuwJaar,
-                verslagsoort: herpuntVerslagsoort(opties, draft.verslagsoort) ?? draft.verslagsoort,
-            });
-        },
+            selectedJaar: draft.jaar ? String(draft.jaar) : null,
+            // The verslagsoort moves with the year, in the draft as well as in the URL. Without it
+            // the select would sit on a code belonging to the year the user just left — unmatched by
+            // any of its items, so blank — and the corrections pass would only sort that out one
+            // Toepassen later. Same rule the corrections pass applies; see herpuntVerslagsoort.
+            onJaarChange: (key) => {
+                const nieuwJaar = key ? Number(key) : undefined;
+                const opties = nieuwJaar ? (options.verslagsoortenPerJaar[String(nieuwJaar)] ?? []) : [];
+                setDraftValue({
+                    jaar: nieuwJaar,
+                    verslagsoort: herpuntVerslagsoort(opties, draft.verslagsoort) ?? draft.verslagsoort,
+                });
+            },
 
-        reservemutaties: resolveReserve(draft.reserve),
-        // Written out either way: with the default on, dropping `false` from the URL would
-        // read back as "not chosen yet" and switch the toggle on again after a reload.
-        onReservemutatiesChange: (checked) => setDraftValue({ reserve: checked }),
+            reservemutaties: resolveReserve(draft.reserve),
+            // Written out either way: with the default on, dropping `false` from the URL would
+            // read back as "not chosen yet" and switch the toggle on again after a reload.
+            onReservemutatiesChange: (checked) => setDraftValue({ reserve: checked }),
 
-        hasPendingChanges: !isSameSearch(draft, search),
-        apply,
-        reset,
-        applyReferentiegroepen,
-    };
+            hasPendingChanges: !isSameSearch(draft, search),
+            apply,
+            reset,
+            applyReferentiegroepen,
+        }),
+        [options, isLoading, error, isReady, applied, draft, search, draftVerslagsoorten, setDraftValue, apply, reset, applyReferentiegroepen],
+    );
 
     return <FiltersContext.Provider value={value}>{children}</FiltersContext.Provider>;
 };

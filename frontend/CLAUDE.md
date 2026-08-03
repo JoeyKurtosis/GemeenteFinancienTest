@@ -166,7 +166,6 @@ Located in `components/base/`, these are the building blocks:
 
 Located in `components/application/`, these are complex UI patterns:
 
-- `DatePicker` - Calendar-based date selection
 - `Modal` - Overlay dialogs
 - `Pagination` - Data navigation
 - `Table` - Data display with sorting

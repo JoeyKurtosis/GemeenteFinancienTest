@@ -40,6 +40,9 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    # Last, so it clears the iv3 bridges' caches as late as possible before the view runs —
+    # nothing above it reads them. See iv3/middleware.py.
+    "iv3.middleware.Iv3RequestCacheMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
