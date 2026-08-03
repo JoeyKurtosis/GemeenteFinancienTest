@@ -2,7 +2,7 @@
 
 import type { FC, HTMLAttributes, MouseEventHandler } from "react";
 import { useCallback, useEffect, useRef } from "react";
-import type { Placement } from "@react-types/overlays";
+import type { Placement } from "react-aria-components";
 import { Link } from "@tanstack/react-router";
 import { ChevronSelectorVertical, LogIn01, LogOut01, Moon01, User01 } from "@untitledui/icons";
 import { useFocusManager } from "react-aria";
@@ -10,7 +10,6 @@ import type { DialogProps as AriaDialogProps } from "react-aria-components";
 import { Button as AriaButton, Dialog as AriaDialog, DialogTrigger as AriaDialogTrigger, Popover as AriaPopover } from "react-aria-components";
 import { Avatar } from "@/components/base/avatar/avatar";
 import { AvatarLabelGroup } from "@/components/base/avatar/avatar-label-group";
-import { Button } from "@/components/base/buttons/button";
 import { Toggle } from "@/components/base/toggle/toggle";
 import { useAuth } from "@/features/auth";
 import { useBreakpoint } from "@/hooks/use-breakpoint";

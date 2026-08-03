@@ -1,8 +1,10 @@
 import { BarChart02, Eye, FileCheck02, Users03 } from "@untitledui/icons";
 import Hero from "@/assets/icons/hero.svg?react";
+import Kurtosis from "@/assets/icons/kurtosis.svg?react";
 import { MetricsIcon02 } from "@/components/application/metrics/metrics";
 import { Button } from "@/components/base/buttons/button";
 import { useAuth } from "@/features/auth";
+import { SignupCtaBanner } from "./signup-cta-banner";
 
 export function DashboardRouteView() {
     const { user, isAuthenticated } = useAuth();
@@ -24,10 +26,12 @@ export function DashboardRouteView() {
                 </div>
                 <Hero className="text-primary" />
             </div>
+
+            {!isAuthenticated && <SignupCtaBanner />}
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <MetricsIcon02
                     title="In één oogopslag"
-                    description="Bekijk een samenvatting van de begrotings- en jaarrekeingcijfers van de geselecteerde gemeente."
+                    description="Bekijk een samenvatting van de begrotings- en jaarrekeningcijfers van de geselecteerde gemeente."
                     icon={<Eye />}
                     footer={<Button href="/begroting">Per Inwoner</Button>}
                 />
@@ -39,7 +43,7 @@ export function DashboardRouteView() {
                 />{" "}
                 <MetricsIcon02
                     title="Begroting versus jaarrekening"
-                    description="Bekijk een samenvatting van de begrotings- en jaarrekeingcijfers van de geselecteerde gemeente."
+                    description="Bekijk een samenvatting van de begrotings- en jaarrekeningcijfers van de geselecteerde gemeente."
                     icon={<FileCheck02 />}
                     footer={
                         <div className="flex gap-3">
@@ -52,7 +56,7 @@ export function DashboardRouteView() {
                 />
                 <MetricsIcon02
                     title="Verdiepende cijfers"
-                    description="Bekijk een samenvatting van de begrotings- en jaarrekeingcijfers van de geselecteerde gemeente."
+                    description="Bekijk een samenvatting van de begrotings- en jaarrekeningcijfers van de geselecteerde gemeente."
                     icon={<BarChart02 />}
                     footer={
                         <div className="flex gap-3">
@@ -63,6 +67,12 @@ export function DashboardRouteView() {
                         </div>
                     }
                 />
+            </div>
+            <div className="flex items-center justify-end gap-3">
+                <p className="text-sm">Dit dashboard is ontwikkeld door:</p>
+                <a href="https://www.kurtosis.nl/" target="_blank">
+                    <Kurtosis className="h-6 w-auto" />
+                </a>
             </div>
         </section>
     );

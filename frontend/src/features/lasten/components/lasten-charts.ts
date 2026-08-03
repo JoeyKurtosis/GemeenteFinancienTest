@@ -14,7 +14,7 @@ const COLORS = {
     purple: "var(--color-utility-purple-600)",
     green: "var(--color-utility-green-600)",
     fuchsia: "var(--color-utility-fuchsia-600)",
-    gray: "var(--color-utility-gray-600)",
+    gray: "var(--color-utility-neutral-600)", // the theme's gray family is named "neutral"
 };
 
 // ── Series ───────────────────────────────────────────────────────────────────

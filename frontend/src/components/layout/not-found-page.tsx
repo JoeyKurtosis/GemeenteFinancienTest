@@ -1,7 +1,6 @@
-import { ArrowLeft, SearchLg } from "@untitledui/icons";
+import { ArrowLeft } from "@untitledui/icons";
 import NotFound from "@/assets/icons/not_found.svg?react";
 import { Button } from "@/components/base/buttons/button";
-import { Illustration } from "@/components/shared-assets/illustrations";
 
 export function NotFoundPage() {
     return (

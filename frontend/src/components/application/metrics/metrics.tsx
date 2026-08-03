@@ -2,7 +2,7 @@
 
 import type { FC, ReactNode } from "react";
 import { useId } from "react";
-import { ArrowDown, ArrowDownRight, ArrowUp, ArrowUpRight, Copy01, Eye, Share01, TrendDown01, TrendUp01, Zap } from "@untitledui/icons";
+import { ArrowDown, ArrowDownRight, ArrowUp, ArrowUpRight, Copy01, Eye, Share01, TrendDown01, TrendUp01 } from "@untitledui/icons";
 import { Area, AreaChart, ResponsiveContainer } from "recharts";
 import type { CurveType } from "recharts/types/shape/Curve";
 import type { Props as DotProps } from "recharts/types/shape/Dot";

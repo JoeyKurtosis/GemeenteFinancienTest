@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowLeft, Key01 } from "@untitledui/icons";
+import { ArrowLeft } from "@untitledui/icons";
 import Logo from "@/assets/icons/logo_venster.svg?react";
 import { Button } from "@/components/base/buttons/button";
 import { Form } from "@/components/base/form/form";
 import { Input } from "@/components/base/input/input";
-import { FeaturedIcon } from "@/components/foundations/featured-icon/featured-icon";
 import { requestPasswordReset } from "../api";
 
 export function ForgotPasswordRouteView() {

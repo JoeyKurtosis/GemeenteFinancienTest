@@ -47,9 +47,9 @@ export interface FilterOptions {
  * Gemeenten and verslagsoorten depend on the year — municipalities merge, and a year
  * only carries a Jaarrekening once it has been filed — so this is refetched per year.
  */
-export async function fetchFilterOptions(jaar?: number | null): Promise<FilterOptions> {
+export async function fetchFilterOptions(jaar?: number | null, signal?: AbortSignal): Promise<FilterOptions> {
     const query = jaar ? `?jaar=${jaar}` : "";
-    const response = await fetch(`/api/iv3/filters/${query}`, { credentials: "include" });
+    const response = await fetch(`/api/iv3/filters/${query}`, { credentials: "include", signal });
 
     if (!response.ok) {
         throw new Error("Filters konden niet worden geladen");

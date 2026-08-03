@@ -112,29 +112,53 @@ export const ChartLegendContent = ({ reversed, payload, align, layout, className
 interface ChartTooltipContentProps extends TooltipProps<ValueType, NameType> {
     isRadialChart?: boolean;
     isPieChart?: boolean;
+    /**
+     * Keep the series row — its name, its colour and its figure — even when the tooltip is
+     * answering for one series alone. A segment of a stacked bar is the case for it: which
+     * series was hit is the whole point of hovering it, and without this a lone entry
+     * collapses to a bare figure that could have come from any of them.
+     */
+    showSeriesName?: boolean;
+    /**
+     * Key on the hovered datum holding the row's own name. Recharts fills `label` in for a
+     * tooltip that answers for a whole axis tick, but leaves it empty for one answering for a
+     * single mark, and the row is still worth naming — this is where to read it from instead.
+     */
+    labelKey?: string;
     label?: string;
     // We have to use `any` here because the `payload` prop is not typed correctly in the `recharts` library.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     payload?: any;
 }
 
-export const ChartTooltipContent = ({ active, payload, label, isRadialChart, isPieChart, formatter, labelFormatter }: ChartTooltipContentProps) => {
+export const ChartTooltipContent = ({
+    active,
+    payload,
+    label,
+    isRadialChart,
+    isPieChart,
+    showSeriesName,
+    labelKey,
+    formatter,
+    labelFormatter,
+}: ChartTooltipContentProps) => {
     const canRender = active && payload && payload.length;
 
     if (!canRender) {
         return null;
     }
 
-    const isSingleDataPoint = payload.length === 1;
+    const isSingleDataPoint = payload.length === 1 && !showSeriesName;
+    const rowLabel = label ?? (labelKey ? payload[0]?.payload?.[labelKey] : undefined);
 
     // If it's a single data point, we use the value as the title and
     // the name as the secondary title.
-    let title = isSingleDataPoint ? (isRadialChart ? payload[0].value : isPieChart ? payload[0].value : payload[0].value) : label;
-    let secondaryTitle = isSingleDataPoint ? (isRadialChart ? payload[0].payload.name : isPieChart ? payload[0].name : label) : payload;
+    let title = isSingleDataPoint ? (isRadialChart ? payload[0].value : isPieChart ? payload[0].value : payload[0].value) : rowLabel;
+    let secondaryTitle = isSingleDataPoint ? (isRadialChart ? payload[0].payload.name : isPieChart ? payload[0].name : rowLabel) : payload;
 
     title =
         isSingleDataPoint && formatter
-            ? formatter(title, payload?.[0].name || label, payload[0], 0, payload)
+            ? formatter(title, payload?.[0].name || rowLabel, payload[0], 0, payload)
             : labelFormatter
               ? labelFormatter(title, payload)
               : title;
@@ -142,7 +166,7 @@ export const ChartTooltipContent = ({ active, payload, label, isRadialChart, isP
 
     return (
         <div className="flex flex-col gap-0.5 rounded-lg bg-primary-solid px-3 py-2 shadow-lg">
-            <p className="text-sm font-semibold text-white">{title}</p>
+            {title != null && title !== "" && <p className="text-sm font-semibold text-white">{title}</p>}
 
             {!secondaryTitle ? null : Array.isArray(secondaryTitle) ? (
                 <div className="flex flex-col gap-1">

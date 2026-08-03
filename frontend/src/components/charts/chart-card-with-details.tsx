@@ -147,7 +147,7 @@ export function ChartCardWithDetails({
                                                 </div>
                                             )}
 
-                                            <ChartContent {...chartContentProps} height={500} />
+                                            <ChartContent {...chartContentProps} height={500} expanded />
                                         </div>
                                     </div>
                                 </div>

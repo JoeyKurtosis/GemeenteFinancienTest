@@ -161,6 +161,23 @@ class Iv3Summary(models.Model):
     # and B3.7 alike, and all three of those are the rioolheffing. See BATEN_HEFFINGEN_TAAKVELDEN.
     baten_heffingen_per_taakveld = models.JSONField(default=dict)
 
+    @property
+    def heffingen_breed(self) -> float:
+        """The total of baten_heffingen_per_categorie — the *wide* lokale heffingen.
+
+        A property rather than a column because it is the sum of one that already exists, and
+        the sync's invariant above is what keeps the two in step.
+
+        It exists so that formulas can name it: expression_eval.ALLOWED_FIELDS lists it, and
+        compile_expression reaches it with a plain getattr. Without it the "overig-baten" and
+        "heffingen-breed" measures could not express what the Baten pages actually compute,
+        since `heffingen` is the narrower B2.2.1 + B2.2.2 and leaves the leges out.
+
+        Reading it needs baten_heffingen_per_categorie loaded: a page whose *_VELDEN tuple omits
+        that column pays one SELECT per row here. See check_query_budget.
+        """
+        return sum(self.baten_heffingen_per_categorie.values())
+
     # Everything left of baten once the heffingen and the rijk are taken out, per
     # hoofdcategorie ("1".."7").
     overige_baten_per_hoofdcategorie = models.JSONField(default=dict)

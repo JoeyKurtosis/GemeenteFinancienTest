@@ -16,9 +16,24 @@ from iv3.models import Gemeente, Inwoners, Iv3Summary, Iv3Taakveld
 
 FIXTURE = "iv3_data"
 
-# Everything the fixture carries. Order is irrelevant — these four models have no foreign
-# keys between them; the dashboard joins them in Python on (jaar, gm_code).
+# The four data models the fixture is *for*. Order is irrelevant — they have no foreign keys
+# between them; the dashboard joins them in Python on (jaar, gm_code).
 MODELS = (Iv3Summary, Iv3Taakveld, Gemeente, Inwoners)
+
+# The fixture is a `dumpdata iv3`, so it also carries the two configuration models — the sixteen
+# Measure rows and the DashboardSettings singleton. Those are not data, they are settings an
+# admin edits from /instellingen, and reloading them on deploy is wrong twice over:
+#
+#   * It silently reverts every edited formula and every changed setting, so a redeploy quietly
+#     undoes an admin's work with nothing in the output to say so.
+#   * It can fail outright. "Standaardwaarden herstellen" used to delete the Measure rows and
+#     re-insert them, which gave them fresh autoincrement pks. loaddata matches on pk, so the
+#     fixture's pk 1-16 would then insert *alongside* rows holding the same keys and hit the
+#     unique constraint on Measure.key — an IntegrityError in the middle of a deploy.
+#
+# So they are excluded here and seeded by init_measures below instead, which inserts only what
+# is missing. A fresh database still ends up with all sixteen; a populated one keeps its edits.
+CONFIG_MODELS = ("iv3.measure", "iv3.dashboardsettings")
 
 
 class Command(BaseCommand):
@@ -45,7 +60,10 @@ class Command(BaseCommand):
         with transaction.atomic():
             for model in MODELS:
                 model.objects.all().delete()
-            call_command("loaddata", FIXTURE, verbosity=0)
+            call_command("loaddata", FIXTURE, exclude=list(CONFIG_MODELS), verbosity=0)
+            # Insert-only, so this is what seeds a fresh database without disturbing a
+            # populated one. See CONFIG_MODELS.
+            call_command("init_measures", verbosity=0)
 
         for model in MODELS:
             self.stdout.write(f"{model.objects.count():6} {model.__name__}")

@@ -37,7 +37,7 @@ export function BegrotingPageView({ weergave }: { weergave: BegrotingWeergave })
         <section className="flex flex-col gap-6">
             <SectionTabs items={begrotingTabs} />
             <div className="grid gap-6 lg:grid-cols-2">
-                <ResultCard title="Resultaat" rows={pagina.resultaat} />
+                <ResultCard title="Resultaat" rows={pagina.resultaat} isLoading={isLoading} />
                 <ChartCard {...pagina.uitgavenPerJaar} isLoading={isLoading} expandable />
                 {pagina.kaarten.map((kaart) => (
                     <ChartCard key={kaart.title} {...kaart} isLoading={isLoading} expandable />
