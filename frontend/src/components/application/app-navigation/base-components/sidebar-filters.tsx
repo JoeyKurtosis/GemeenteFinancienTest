@@ -1,6 +1,5 @@
 "use client";
 
-import { useLocation } from "@tanstack/react-router";
 import { HelpCircle } from "@untitledui/icons";
 import type { Key, Selection } from "react-aria-components";
 import { Button } from "@/components/base/buttons/button";
@@ -8,7 +7,7 @@ import { MultiSelect } from "@/components/base/select/multi-select";
 import { Select } from "@/components/base/select/select";
 import { Toggle } from "@/components/base/toggle/toggle";
 import { Tooltip, TooltipTrigger } from "@/components/base/tooltip/tooltip";
-import { type FilterOption, useFilters } from "@/features/filters";
+import { type FilterOption, useFilterRelevance, useFilters } from "@/features/filters";
 import { cx } from "@/utils/cx";
 
 /** Synthetic key for the "Alles" row; never leaves this component. */
@@ -47,38 +46,7 @@ const withAllesRow = (options: FilterOption[], selected: Selection, onChange: (k
     };
 };
 
-/** Route prefixes where the "Reservemutaties" toggle is relevant (matches sub-routes too). */
-const reservemutatiesRoutes = ["/begroting", "/baten", "/lasten", "/gemeentelijkestand", "/managementoverzicht"];
-
-/** Route prefixes where the "Verslagsoort" filter is relevant (matches sub-routes too). */
-const verslagsoortRoutes = ["/gemeentelijkestand", "/benchmark", "/baten", "/managementoverzicht"];
-
-/**
- * Routes where "Verslagsoort" applies to the index page and *not* to its sub-routes.
- *
- * /begroting alone: its overzicht tab is drawn from one report like every other page, but the
- * two begroting-vs-jaarrekening tabs put both verslagsoorten on the category axis and compare
- * them against each other. Picking one there answers nothing — queries.begroting sends those
- * two down _begroting_per_verslagsoort, which never reads the selected code.
- */
-const verslagsoortIndexRoutes = ["/begroting"];
-
-export interface SidebarFiltersState {
-    selectedGemeente: Key | null;
-    onGemeenteChange: (key: Key | null) => void;
-    selectedReferentiegroepen: Selection;
-    onReferentiegroepenChange: (keys: Selection) => void;
-    selectedInwonergroepen: Selection;
-    onInwonergroepenChange: (keys: Selection) => void;
-    selectedVerslagsoort: Key | null;
-    onVerslagsoortChange: (key: Key | null) => void;
-    selectedJaar: Key | null;
-    onJaarChange: (key: Key | null) => void;
-    reservemutaties: boolean;
-    onReservemutatiesChange: (value: boolean) => void;
-}
-
-interface SidebarFiltersProps extends SidebarFiltersState {
+interface SidebarFiltersProps {
     /** Additional CSS classes to apply to the wrapper. */
     className?: string;
     /** Called when the user applies the filters (e.g. to close the popover). */
@@ -87,36 +55,42 @@ interface SidebarFiltersProps extends SidebarFiltersState {
 
 /**
  * The dashboard filters, of which each route shows the ones it actually draws with.
- * Rendered inline in the expanded sidebar header and inside a popover when collapsed.
- * State is owned by the parent so it stays in sync between both renderings.
+ *
+ * Rendered from every control that opens the filter menu — the sidebar's button, its collapsed
+ * icon, and the summary row above the charts. It reads FiltersProvider itself rather than taking
+ * the selections as props: it is only ever mounted inside that provider, and passing twelve
+ * values down meant each new trigger had to assemble the same object again.
  *
  * Gemeentelijke Stand is the one route that reads differently: it has no single gemeente
  * to compare against a group, so the ComboBox is left off and the multi-select is the
  * report's "Gemeente" slicer — the set of municipalities every average is taken over.
  */
-export const SidebarFilters = ({
-    selectedGemeente,
-    onGemeenteChange,
-    selectedReferentiegroepen,
-    onReferentiegroepenChange,
-    selectedInwonergroepen,
-    onInwonergroepenChange,
-    selectedVerslagsoort,
-    onVerslagsoortChange,
-    selectedJaar,
-    onJaarChange,
-    reservemutaties,
-    onReservemutatiesChange,
-    className,
-    onApply,
-}: SidebarFiltersProps) => {
-    const { pathname } = useLocation();
-    const { options, draftVerslagsoorten, isLoading, reset, apply, hasPendingChanges } = useFilters();
+export const SidebarFilters = ({ className, onApply }: SidebarFiltersProps) => {
+    const {
+        options,
+        draftVerslagsoorten,
+        isLoading,
+        reset,
+        apply,
+        hasPendingChanges,
+        selectedGemeente,
+        onGemeenteChange,
+        selectedReferentiegroepen,
+        onReferentiegroepenChange,
+        selectedInwonergroepen,
+        onInwonergroepenChange,
+        selectedVerslagsoort,
+        onVerslagsoortChange,
+        selectedJaar,
+        onJaarChange,
+        reservemutaties,
+        onReservemutatiesChange,
+    } = useFilters();
 
-    // The one route whose filters read differently — see the component docstring.
-    const isGemeentelijkeStand = pathname === "/gemeentelijkestand" || pathname.startsWith("/gemeentelijkestand/");
+    const relevance = useFilterRelevance();
+    const isGemeentelijkeStand = !relevance.gemeente;
+    const showReservemutaties = relevance.reservemutaties;
 
-    const showReservemutaties = reservemutatiesRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`));
     // Only where there is a choice to make. A year carries a Jaarrekening once it has been
     // filed, so the newest year or two hold nothing but a Begroting — and a dropdown with one
     // option is a control that cannot do anything. Counted off the options rather than tested
@@ -124,10 +98,10 @@ export const SidebarFilters = ({
     //
     // Off the *draft* year, not the applied one: picking 2024 in the select beside this has to
     // reveal the choice immediately, not after a Toepassen and a second trip into this menu.
-    const opVerslagsoortRoute =
-        verslagsoortRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`)) ||
-        verslagsoortIndexRoutes.some((route) => pathname === route || pathname === `${route}/`);
-    const showVerslagsoort = draftVerslagsoorten.length > 1 && opVerslagsoortRoute;
+    //
+    // Kept here rather than in useFilterRelevance because it is a statement about the data, not
+    // about the route — the summary row asks the same hook and wants the route's answer.
+    const showVerslagsoort = draftVerslagsoorten.length > 1 && relevance.verslagsoort;
 
     const jaren = options.jaren.map((jaar) => ({ id: String(jaar), label: String(jaar) }));
 
@@ -158,7 +132,7 @@ export const SidebarFilters = ({
             {/* One selection, two readings: the group your gemeente is held against
                 elsewhere, the population the averages are taken over here. */}
             <MultiSelect
-                label={isGemeentelijkeStand ? "Gemeente" : "Referentiegroep"}
+                label={relevance.referentieLabel}
                 placeholder="Selecteer gemeenten"
                 size="sm"
                 isDisabled={isLoading}

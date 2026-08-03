@@ -46,7 +46,7 @@ export default function NetherlandsMap({ samenstelling }: NetherlandsMapProps) {
     const tooltipRef = useRef<HTMLDivElement>(null);
     const [zweeftOver, setZweeftOver] = useState<string | null>(null);
 
-    const { transform, kanInzoomen, kanUitzoomen, zoomIn, zoomUit, reset, zoomNaarVak, wasSleep, pointerHandlers, view } = useMapView(wrapperRef);
+    const { transform, kanInzoomen, kanUitzoomen, kanHerstellen, zoomIn, zoomUit, reset, zoomNaarVak, wasSleep, pointerHandlers } = useMapView(wrapperRef);
 
     const gemeentePerCode = useMemo(() => new Map(options.gemeenten.map((gemeente) => [gemeente.id, gemeente])), [options.gemeenten]);
 
@@ -228,9 +228,7 @@ export default function NetherlandsMap({ samenstelling }: NetherlandsMapProps) {
                     {...pointerHandlers}
                     onPointerMove={onPointerMove}
                     onPointerLeave={() => setZweeftOver(null)}
-                    className={`relative h-[clamp(420px,72vh,860px)] w-full touch-none overflow-hidden rounded-[12px] bg-secondary select-none ${
-                        view.k > 1 ? "cursor-grab active:cursor-grabbing" : ""
-                    }`}
+                    className="relative h-[clamp(420px,72vh,860px)] w-full cursor-grab touch-none overflow-hidden rounded-[12px] bg-secondary select-none active:cursor-grabbing"
                 >
                     <svg ref={svgRef} viewBox={MAP_VIEWBOX} preserveAspectRatio="xMidYMid meet" className="size-full" aria-hidden="true" focusable="false">
                         {/* non-scaling-stroke pins the borders to screen space, so they stay hairlines
@@ -275,7 +273,7 @@ export default function NetherlandsMap({ samenstelling }: NetherlandsMapProps) {
                         size="sm"
                         iconLeading={RefreshCw01}
                         aria-label="Kaart herstellen"
-                        isDisabled={!kanUitzoomen || isLoading}
+                        isDisabled={!kanHerstellen || isLoading}
                         onClick={reset}
                     />
                 </div>

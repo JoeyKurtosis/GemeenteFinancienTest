@@ -376,6 +376,13 @@ def _saldo_pct(rows) -> float | None:
     Keeps one decimal where the euro measures round to whole euros — this is a percentage, and
     the report prints it as `0.0%`. DIVIDE's third argument is the 0 returned on a zero
     denominator; an empty cohort stays blank.
+
+    The "overschot" Measure is applied here, and it is the one measure on this dashboard that
+    does not run per row. It cannot: the ratio is taken *after* the two averages, which is the
+    whole point of the DAX above, so a per-row formula would compute a different number. It is
+    evaluated instead against a synthetic row carrying the two cohort means, where `baten` and
+    `lasten` are already euros per inhabitant. The stored default expression is lines 384-386
+    verbatim, so the default figure is unchanged.
     """
     baten = _per_inwoner_mean(rows, lambda row: row.basis_baten)
     lasten = _per_inwoner_mean(rows, lambda row: row.basis_lasten)
@@ -383,7 +390,10 @@ def _saldo_pct(rows) -> float | None:
         return None
     if not (baten + lasten):
         return 0.0
-    return round((baten - lasten) / (baten + lasten) * 100, 1)
+    meting = get_measure_fn("overschot")
+    if meting is None:
+        return round((baten - lasten) / (baten + lasten) * 100, 1)
+    return round(meting(SimpleNamespace(baten=baten, lasten=lasten)), 1)
 
 
 def _apply_reservemutaties(
@@ -780,19 +790,44 @@ def _bronnen(snapshot, reeksen, bronnen: dict, meting) -> dict:
 #
 # The four still partition baten exactly — the residual subtracts both halves of the rijk — which
 # is what lets _bronnen print a total at the end of the bar that its segments add up to.
-def _heffingen_breed(r) -> float:
-    return sum(r.baten_heffingen_per_categorie.values())
+# Each of the four is a Measure, so the Baten badge these carry on the settings page is true.
+# The heffingen slice is the "heffingen-breed" measure and not "heffingen": the narrow column is
+# a different figure, for the reason spelled out above, and pointing this bar at it would be the
+# EUR 148 bug that paragraph describes. `Iv3Summary.heffingen_breed` is what lets a formula name
+# the wide one.
+def _baten_heffingen(row) -> float:
+    """Lokale heffingen as the Baten pages count them: B2.2.1 + B2.2.2 + B3.7.
+
+    Deliberately not row.heffingen, which leaves the leges out — see
+    CATEGORIEEN_BATEN_LOKALE_HEFFINGEN for why the two disagree.
+    """
+    return row.heffingen_breed
 
 
-INKOMSTEN_BRONNEN = {
-    "rijk": (d.BATEN_BRON_LABELS["rijk"], lambda r: r.rijk),
-    "spuks": (d.BATEN_BRON_LABELS["spuks"], lambda r: r.spuks),
-    "heffingen": (d.BATEN_BRON_LABELS["heffingen"], _heffingen_breed),
-    "overig": (
-        d.BATEN_BRON_LABELS["overig"],
-        lambda r: r.baten - r.rijk - r.spuks - _heffingen_breed(r),
-    ),
+def _overige_baten(row) -> float:
+    """What is left of baten once the two named bronnen are taken out.
+
+    A residual rather than a column of its own, exactly as INKOMSTEN_BRONNEN does it: the
+    sync guarantees the three parts partition baten, so this cannot drift from the total the
+    donut prints in its centre.
+    """
+    return row.baten - row.rijk - row.spuks - _baten_heffingen(row)
+
+
+_INKOMSTEN_BRON_DEFAULTS = {
+    "rijk": ("rijk", lambda r: r.rijk),
+    "spuks": ("spuks", lambda r: r.spuks),
+    "heffingen": ("heffingen-breed", _baten_heffingen),
+    "overig": ("overig-baten", _overige_baten),
 }
+
+
+def _get_inkomsten_bronnen() -> dict:
+    """Build the INKOMSTEN_BRONNEN dict, preferring DB-defined measures."""
+    return {
+        key: (d.BATEN_BRON_LABELS[key], get_measure_fn(measure_key, fallback=default))
+        for key, (measure_key, default) in _INKOMSTEN_BRON_DEFAULTS.items()
+    }
 
 # The hoofdcategorie the goederen en diensten sit in; `inhuur` (L3.5.1) is one of its
 # categorieën and is drawn out of it rather than beside it.
@@ -936,11 +971,25 @@ UITGAVEN_HOOFDTAAKVELDEN = {
 }
 
 
-RESULTAAT_POSTEN = {
+# The Begroting resultaat card: what came in, what went out, and the saldo between them.
+#
+# Every post is a Measure key of its own, resolved the same way _LIJN_DEFAULTS is — the three
+# lambdas below are the fallback, not the definition. `uitgaven` shares its key with the line
+# metric deliberately: the card and the uitgavenPerJaar chart beside it are the same figure,
+# and an edited formula that moved one but not the other would be a bug on the page.
+_RESULTAAT_DEFAULTS = {
     "inkomsten": lambda r: r.baten,
     "uitgaven": lambda r: r.lasten,
     "resultaat": lambda r: r.baten - r.lasten,
 }
+
+
+def _get_resultaat_posten() -> dict:
+    """Build the RESULTAAT_POSTEN dict, preferring DB-defined measures."""
+    return {
+        key: get_measure_fn(key, fallback=default)
+        for key, default in _RESULTAAT_DEFAULTS.items()
+    }
 
 # The two report types as reeksen, in drawing order: what was planned, then what happened.
 VERSLAGSOORT_REEKSEN = {
@@ -1142,7 +1191,7 @@ def begroting(
                 "label": reeks["label"],
                 **{
                     post: meting(snapshot.get(reeks["key"], []), measure)
-                    for post, measure in RESULTAAT_POSTEN.items()
+                    for post, measure in _get_resultaat_posten().items()
                 },
             }
             for reeks in reeksen
@@ -1159,7 +1208,7 @@ def begroting(
             }
             for chart_jaar in jaren
         ],
-        "inkomsten": _bronnen(snapshot, reeksen, INKOMSTEN_BRONNEN, meting),
+        "inkomsten": _bronnen(snapshot, reeksen, _get_inkomsten_bronnen(), meting),
         "verdeling": {
             # Measured rather than read straight off per_hoofdtaakveld: the sociaal domein has
             # the report's "(Leeg)" bucket taken out of it. See UITGAVEN_HOOFDTAAKVELDEN.
@@ -1198,7 +1247,9 @@ BENCHMARK_VELDEN = (
 
 
 def _personeel(row) -> float:
-    return row.salarissen + row.inhuur
+    """The "personeel" Measure — the same one the Gemeentelijke Stand line draws, so the
+    Benchmark badge on the settings page is true and the two pages cannot disagree."""
+    return get_measure_fn("personeel", fallback=lambda r: r.salarissen + r.inhuur)(row)
 
 
 def benchmark(
@@ -1327,23 +1378,9 @@ def _taakveld_donut(cohort: dict, snapshot: dict) -> dict:
 # nothing here repeats it.
 
 
-def _baten_heffingen(row) -> float:
-    """Lokale heffingen as the Baten pages count them: B2.2.1 + B2.2.2 + B3.7.
-
-    Deliberately not row.heffingen, which leaves the leges out — see
-    CATEGORIEEN_BATEN_LOKALE_HEFFINGEN for why the two disagree.
-    """
-    return sum(row.baten_heffingen_per_categorie.values())
-
-
-def _overige_baten(row) -> float:
-    """What is left of baten once the two named bronnen are taken out.
-
-    A residual rather than a column of its own, exactly as INKOMSTEN_BRONNEN does it: the
-    sync guarantees the three parts partition baten, so this cannot drift from the total the
-    donut prints in its centre.
-    """
-    return row.baten - row.rijk - row.spuks - _baten_heffingen(row)
+# _baten_heffingen and _overige_baten are defined beside _INKOMSTEN_BRON_DEFAULTS, which needs
+# them at module-eval time. They were duplicated here for a while; both copies are the fallbacks
+# behind the "heffingen-breed" and "overig-baten" measures now, and there is only one of each.
 
 
 # The Lokale heffingen slices as the report's legend lists them: its "(Leeg)" bucket, then the
@@ -1392,13 +1429,35 @@ def _bron_waarden(row) -> dict[str, float]:
     The report draws these from `Inkomsten per bron` crossed with the taakveld, which is what
     splits the rijk into the algemene uitkering (0.7) and the SPUKs. Both already have a
     column, so the cross is just the two of them side by side.
+
+    The same four measures the Begroting page's Inkomsten bar draws, resolved through
+    _get_inkomsten_bronnen so the two screens cannot print different numbers for one bron.
+
+    Note what that costs: the four partition `baten` exactly only as long as the formulas are
+    the defaults. An admin who edits `rijk` moves this slice but not the `overig-baten`
+    residual, which subtracts the raw column — the donut's slices then no longer add to the
+    figure in its centre. That is inherent to letting the formulas be edited at all, and it is
+    equally true of every other wired measure; the defaults are what the invariant is stated
+    against.
     """
-    return {
-        "rijk": row.rijk,
-        "spuks": row.spuks,
-        "heffingen": _baten_heffingen(row),
-        "overig": _overige_baten(row),
-    }
+    return {key: meting(row) for key, (_, meting) in _get_inkomsten_bronnen().items()}
+
+
+def _spuks_totaal(row) -> float:
+    """The Baten overige rijk page's centre figure — the same measure as its `spuks` slice on
+    the main page, so an edited formula moves both."""
+    return get_measure_fn("spuks", fallback=lambda r: r.spuks)(row)
+
+
+def _heffingen_totaal(row) -> float:
+    """The Lokale heffingen page's centre figure. Its slices come from LOKALE_HEFFINGEN, whose
+    residual is taken against the raw column rather than this — see the note in _bron_waarden."""
+    return get_measure_fn("heffingen-breed", fallback=_baten_heffingen)(row)
+
+
+def _overig_totaal(row) -> float:
+    """The Overige inkomsten page's centre figure, matching its `overig` slice on the main page."""
+    return get_measure_fn("overig-baten", fallback=_overige_baten)(row)
 
 
 # What each page is about: the figure in the centre of its donut, and how that figure is cut
@@ -1437,7 +1496,7 @@ BATEN_PAGINAS = {
     # taakveld 0.7, which leaves the algemene uitkering out. Named for the page, not the
     # column — the URL slug is /baten/overige-baten-rijk.
     "rijk": {
-        "totaal": lambda row: row.spuks,
+        "totaal": _spuks_totaal,
         "waarden": lambda row: row.spuks_per_hoofdtaakveld,
         "labels": d.HOOFDTAAKVELD_LABELS,
         # Nothing this page draws is booked on 0.10: the toggle moves baten, and this draws the
@@ -1447,7 +1506,7 @@ BATEN_PAGINAS = {
         "velden": (*_VELDEN_BASIS, *_VELDEN_RESERVE_TOTALEN, "spuks", "spuks_per_hoofdtaakveld"),
     },
     "heffingen": {
-        "totaal": _baten_heffingen,
+        "totaal": _heffingen_totaal,
         "waarden": _heffingen_waarden,
         "labels": BATEN_HEFFINGEN_SLICES,
         "baten_verdeling": False,
@@ -1457,7 +1516,7 @@ BATEN_PAGINAS = {
                    "baten_heffingen_per_categorie", "baten_heffingen_per_taakveld"),
     },
     "overig": {
-        "totaal": _overige_baten,
+        "totaal": _overig_totaal,
         "waarden": _overige_inkomsten_waarden,
         "labels": BATEN_OVERIG_SLICES,
         # The one Baten page that reads a breakdown the toggle moves: reserve_baten lands in the
@@ -1630,6 +1689,14 @@ LASTEN_VELDEN = (
     *_VELDEN_RESERVE_TOTALEN,  # the overview's totaal is row.lasten
     *_VELDEN_RESERVE_LASTEN_VERDELING,  # _lasten_per_hoofdtaakveld, _lasten_categorieen, the donut
     "resultaat_lasten_per_hoofdcategorie",  # _resultaat_lasten — the overview draws 0.11 too
+    # The last two are the detail pages' only, and both were missing here until the deferred
+    # loads they caused were measured: `?taakveld=6` issued 3.903 queries and took 2,8s, against
+    # 14 queries once they were listed. They are named on every Lasten page rather than only the
+    # pages that read them, because .only() is chosen once for all ten (see the note above) and a
+    # column present but unread costs one JSON decode, while a column read but absent costs a
+    # SELECT per row.
+    "naamloze_lasten_per_hoofdcategorie",  # _lasten_categorieen, on hoofdtaakveld 6 alone
+    "personeel_per_hoofdtaakveld",  # _lasten_kostensoort_bar's inhuur segment
 )
 
 
@@ -1927,33 +1994,27 @@ def _lasten_donut_labels(jaar: int, hoofdtaakveld: str, reserve: bool) -> dict[s
 # the sixth is the solvabiliteit, which is a percentage off the balance sheet and is drawn by
 # rules of its own — see _solvabiliteit_pct and the pinning in managementoverzicht().
 
+# Line key -> (Measure key, the fallback formula). The two names differ for three of the five
+# because the Measure keys are global while these are local to this page: `salarissen` here is
+# salarissen *minus overhead*, which is not what the Gemeentelijke Stand means by the word.
+#
+# belastingdruk is the wide heffingen and shares its measure with the Baten page's heffingen
+# slice, which is the same figure under a different name on a different chart.
 _MANAGEMENT_DEFAULTS = {
-    "uitgaven": lambda row: row.lasten,
-    "belastingdruk": _baten_heffingen,
-    "salarissen": lambda row: row.salarissen - row.salarissen_overhead,
-    "inhuur": lambda row: row.inhuur - row.inhuur_overhead,
-    "overhead": lambda row: row.salarissen_overhead + row.inhuur_overhead,
-}
-
-# Mapping from MANAGEMENT_LIJNEN key to Measure DB key.
-_MANAGEMENT_MEASURE_KEYS = {
-    "uitgaven": "uitgaven",
-    "salarissen": "mgmt-salarissen",
-    "inhuur": "mgmt-inhuur",
-    "overhead": "mgmt-overhead",
+    "uitgaven": ("uitgaven", lambda row: row.lasten),
+    "belastingdruk": ("heffingen-breed", _baten_heffingen),
+    "salarissen": ("mgmt-salarissen", lambda row: row.salarissen - row.salarissen_overhead),
+    "inhuur": ("mgmt-inhuur", lambda row: row.inhuur - row.inhuur_overhead),
+    "overhead": ("mgmt-overhead", lambda row: row.salarissen_overhead + row.inhuur_overhead),
 }
 
 
 def _get_management_lijnen() -> dict:
     """Build the MANAGEMENT_LIJNEN dict, preferring DB-defined measures."""
-    result = {}
-    for key, default in _MANAGEMENT_DEFAULTS.items():
-        db_key = _MANAGEMENT_MEASURE_KEYS.get(key)
-        if db_key:
-            result[key] = get_measure_fn(db_key, fallback=default)
-        else:
-            result[key] = default
-    return result
+    return {
+        key: get_measure_fn(measure_key, fallback=default)
+        for key, (measure_key, default) in _MANAGEMENT_DEFAULTS.items()
+    }
 
 # One JSON column for six lines. The balans pair rides along because the solvabiliteit reads it
 # off these same rows whenever the page is already drawn from a Jaarrekening — see
@@ -2000,8 +2061,18 @@ def _solvabiliteit_pct(rows) -> float | None:
 
     Keeps one decimal: a tenth is a real difference between two gemeenten here, which whole-euro
     rounding would throw away — the chart card says as much on the frontend side.
+
+    The ratio itself is a Measure ("solvabiliteit"), applied per row and then averaged. That is
+    the order the mean above describes, and the stored default expression is the line it replaced
+    verbatim, so the default figure is unchanged. The `if row.balanstotaal` guard stays outside
+    the measure: it is what makes an all-Begroting cohort come back blank rather than 0, and the
+    evaluator's own divide-by-zero rule would quietly return 0.0 instead.
     """
-    ratios = [row.eigen_vermogen / row.balanstotaal * 100 for row in rows if row.balanstotaal]
+    meting = get_measure_fn(
+        "solvabiliteit",
+        fallback=lambda row: row.eigen_vermogen / row.balanstotaal * 100,
+    )
+    ratios = [meting(row) for row in rows if row.balanstotaal]
     if not ratios:
         return None
     return round(sum(ratios) / len(ratios), 1)
