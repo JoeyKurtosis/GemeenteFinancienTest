@@ -1,0 +1,58 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: gemeentefinancien
+      POSTGRES_USER: gemeentefinancien
+      POSTGRES_PASSWORD: localdev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gemeentefinancien"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    entrypoint: []
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py load_iv3_data --skip-if-loaded &&
+             python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - ./backend:/app
+      - backend_media:/app/media
+    ports:
+      - "8000:8000"
+    environment:
+      DEBUG: "True"
+      SECRET_KEY: "django-insecure-local-docker-dev"
+      APP_DB_HOST: db
+      APP_DB_NAME: gemeentefinancien
+      APP_DB_USER: gemeentefinancien
+      APP_DB_PASSWORD: localdev
+      APP_DB_PORT: "5432"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      target: dev
+    command: npm run dev -- --host 0.0.0.0
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_BACKEND_URL: http://backend:8000
+
+volumes:
+  pgdata:
+  backend_media:
