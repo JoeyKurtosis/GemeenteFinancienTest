@@ -30,6 +30,17 @@ export function BenchmarkRouteView() {
 
             <ChartCard title="Trend" data={data?.trend ?? []} series={trendSeries(data?.cohorten ?? [])} chartType="line" isLoading={isLoading} expandable />
 
+            {taakvelden && (
+                <DonutComparisonCard
+                    title="Personele lasten per inwoner per taakveld"
+                    categories={taakveldCategories(taakvelden)}
+                    left={donutSide(taakvelden, taakvelden.links)}
+                    right={donutSide(taakvelden, taakvelden.rechts)}
+                    expandable
+                    className="col-span-2"
+                />
+            )}
+
             {/* Without a referentiegroep there are no gemeenten to draw, so the card says so
                 rather than showing an empty chart. */}
             {referentiegroep.length > 0 || isLoading ? (
@@ -56,17 +67,6 @@ export function BenchmarkRouteView() {
                 isLoading={isLoading}
                 expandable
             />
-
-            {taakvelden && (
-                <DonutComparisonCard
-                    title="Personele lasten per inwoner per taakveld"
-                    categories={taakveldCategories(taakvelden)}
-                    left={donutSide(taakvelden, taakvelden.links)}
-                    right={donutSide(taakvelden, taakvelden.rechts)}
-                    expandable
-                    className="col-span-2"
-                />
-            )}
         </section>
     );
 }

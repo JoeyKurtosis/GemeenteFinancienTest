@@ -6,7 +6,6 @@ import { useBegroting } from "../hooks/use-begroting";
 import { begrotingPagina } from "./begroting-charts";
 
 const begrotingTabs: SectionTab[] = [
-    { label: "Begroting", href: "/begroting" },
     { label: "Begroting versus Jaarrekening (per inwoner)", href: "/begroting/begroting-vs-jaarrekening-per-inwoner" },
     { label: "Begroting versus Jaarrekening (absolute bedragen)", href: "/begroting/begroting-vs-jaarrekening-absolute-bedragen" },
 ];

@@ -87,7 +87,7 @@ export function FilterSummary({ className }: { className?: string }) {
 
     if (relevance.referentie) {
         regels.push({
-            // "Referentiegroep" on most pages, "Gemeente" on Gemeentelijke Stand, where the same
+            // "Referentiegroep" on most pages, "Gemeente" on Trends, where the same
             // selection is the set every average is taken over rather than a group to compare
             // against. The gemeente row above is absent there, so the two never collide.
             label: relevance.referentieLabel,

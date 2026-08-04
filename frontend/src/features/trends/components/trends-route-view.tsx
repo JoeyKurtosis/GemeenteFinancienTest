@@ -1,13 +1,13 @@
 import { ChartCard } from "@/components/charts/chart-card";
-import { useGemeentelijkeStand } from "../hooks/use-gemeentelijke-stand";
-import { cohortSeries, indexSeries, spuksSeries, verdelingSeries } from "./gemeentelijkestand-charts";
+import { useTrends } from "../hooks/use-trends";
+import { cohortSeries, indexSeries, spuksSeries, verdelingSeries } from "./trends-charts";
 
 function SectionHeading({ children }: { children: string }) {
     return <h2 className="pb-2 text-display-xs font-semibold text-primary">{children}</h2>;
 }
 
-export function GemeentelijkeStandRouteView() {
-    const { data, isLoading, error } = useGemeentelijkeStand();
+export function TrendsRouteView() {
+    const { data, isLoading, error } = useTrends();
 
     if (error) {
         return (

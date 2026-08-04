@@ -354,7 +354,7 @@ export const FiltersProvider = ({ children }: { children: ReactNode }) => {
 
     // Memoized because everything under this provider consumes it, charts included. Every
     // sidebar interaction moves the draft, and a fresh object literal here handed all of them a
-    // new context value — re-rendering all fourteen recharts trees on Gemeentelijke Stand on
+    // new context value — re-rendering all fourteen recharts trees on Trends on
     // every keystroke, long before anyone pressed Toepassen. Nothing refetched (the queries key
     // off the applied filters, not the draft), but the render was paid all the same.
     const value = useMemo<FiltersContextValue>(

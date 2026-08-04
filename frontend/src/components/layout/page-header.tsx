@@ -1,8 +1,8 @@
+import type { ReactNode } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { HomeLine } from "@untitledui/icons";
-import type { ReactNode } from "react";
-import type { RouteAction } from "@/hooks/use-route-metadata";
 import { Button } from "@/components/base/buttons/button";
+import type { RouteAction } from "@/hooks/use-route-metadata";
 
 const BREADCRUMB_LABELS: Record<string, string> = {
     dashboard: "Dashboard",
@@ -29,7 +29,7 @@ export function PageHeader({ title, description, children, showBreadCrumbs = tru
                 <nav aria-label="Breadcrumb" className="mb-5 max-md:hidden">
                     <ol className="flex items-center gap-1.5 text-sm">
                         <li>
-                            <Link to="/" search={true} className="text-fg-quaternary hover:text-fg-tertiary transition duration-100">
+                            <Link to="/" search={true} className="text-fg-quaternary transition duration-100 hover:text-fg-tertiary">
                                 <HomeLine className="size-4" />
                             </Link>
                         </li>
@@ -46,7 +46,7 @@ export function PageHeader({ title, description, children, showBreadCrumbs = tru
                                     {isLast ? (
                                         <span className="font-semibold text-tertiary">{label}</span>
                                     ) : (
-                                        <Link to={path} search={true} className="font-semibold text-tertiary hover:text-secondary transition duration-100">
+                                        <Link to={path} search={true} className="font-semibold text-tertiary transition duration-100 hover:text-secondary">
                                             {label}
                                         </Link>
                                     )}
@@ -59,7 +59,16 @@ export function PageHeader({ title, description, children, showBreadCrumbs = tru
 
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                    <h1 className="text-xl font-semibold text-primary md:text-display-xs">{title}</h1>
+                    <h1 className="text-xl font-semibold text-primary md:text-display-xs">
+                        {isHome ? (
+                            <>
+                                <span className="text-brand-600">Gemeente</span>
+                                <span>financiën</span>
+                            </>
+                        ) : (
+                            title
+                        )}
+                    </h1>
                     {description && <p className="mt-1 text-sm text-tertiary md:text-md">{description}</p>}
                     {children && <div className="mt-1 text-sm text-tertiary">{children}</div>}
                 </div>

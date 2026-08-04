@@ -1,8 +1,9 @@
 "use client";
 
-import { HelpCircle } from "@untitledui/icons";
-import type { Key, Selection } from "react-aria-components";
+import { HelpCircle, LinkExternal01 } from "@untitledui/icons";
+import { Link as AriaLink, type Key, type Selection } from "react-aria-components";
 import { Button } from "@/components/base/buttons/button";
+import { Label } from "@/components/base/input/label";
 import { MultiSelect } from "@/components/base/select/multi-select";
 import { Select } from "@/components/base/select/select";
 import { Toggle } from "@/components/base/toggle/toggle";
@@ -61,7 +62,7 @@ interface SidebarFiltersProps {
  * the selections as props: it is only ever mounted inside that provider, and passing twelve
  * values down meant each new trigger had to assemble the same object again.
  *
- * Gemeentelijke Stand is the one route that reads differently: it has no single gemeente
+ * Trends is the one route that reads differently: it has no single gemeente
  * to compare against a group, so the ComboBox is left off and the multi-select is the
  * report's "Gemeente" slicer — the set of municipalities every average is taken over.
  */
@@ -88,7 +89,7 @@ export const SidebarFilters = ({ className, onApply }: SidebarFiltersProps) => {
     } = useFilters();
 
     const relevance = useFilterRelevance();
-    const isGemeentelijkeStand = !relevance.gemeente;
+    const isTrends = !relevance.gemeente;
     const showReservemutaties = relevance.reservemutaties;
 
     // Only where there is a choice to make. A year carries a Jaarrekening once it has been
@@ -110,7 +111,7 @@ export const SidebarFilters = ({ className, onApply }: SidebarFiltersProps) => {
 
     return (
         <div className={cx("flex flex-col gap-4", className)}>
-            {!isGemeentelijkeStand && (
+            {!isTrends && (
                 <Select.ComboBox
                     label="Jouw gemeente"
                     placeholder={isLoading ? "Laden..." : "Zoek gemeente..."}
@@ -131,31 +132,28 @@ export const SidebarFilters = ({ className, onApply }: SidebarFiltersProps) => {
 
             {/* One selection, two readings: the group your gemeente is held against
                 elsewhere, the population the averages are taken over here. */}
-            <MultiSelect
-                label={relevance.referentieLabel}
-                placeholder="Selecteer gemeenten"
-                size="sm"
-                isDisabled={isLoading}
-                showFooter={false}
-                {...referentiegroep}
-            >
-                {(item) => (
-                    <MultiSelect.Item id={item.id} label={item.label} selectionIndicator="checkbox">
-                        {item.label}
-                    </MultiSelect.Item>
-                )}
-            </MultiSelect>
+            <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                    <AriaLink
+                        href="/referentiegroep"
+                        className="flex items-center gap-1.5 text-fg-quaternary transition duration-100 ease-linear hover:text-fg-quaternary_hover"
+                    >
+                        <Label className="cursor-pointer">{relevance.referentieLabel}</Label>
+                        <LinkExternal01 className="size-4" aria-hidden="true" />
+                    </AriaLink>
+                </div>
+                <MultiSelect placeholder="Selecteer gemeenten" size="sm" isDisabled={isLoading} showFooter={false} {...referentiegroep}>
+                    {(item) => (
+                        <MultiSelect.Item id={item.id} label={item.label} selectionIndicator="checkbox">
+                            {item.label}
+                        </MultiSelect.Item>
+                    )}
+                </MultiSelect>
+            </div>
 
             {/* Each selected size class becomes a line of its own on the charts. */}
-            {isGemeentelijkeStand && (
-                <MultiSelect
-                    label="Inwonergroep"
-                    placeholder="Selecteer inwonergroepen"
-                    size="sm"
-                    isDisabled={isLoading}
-                    showFooter={false}
-                    {...inwonergroep}
-                >
+            {isTrends && (
+                <MultiSelect label="Inwonergroep" placeholder="Selecteer inwonergroepen" size="sm" isDisabled={isLoading} showFooter={false} {...inwonergroep}>
                     {(item) => (
                         <MultiSelect.Item id={item.id} label={item.label} selectionIndicator="checkbox">
                             {item.label}

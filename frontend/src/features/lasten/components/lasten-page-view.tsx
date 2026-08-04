@@ -1,7 +1,7 @@
 import { ChartCard } from "@/components/charts/chart-card";
 import { DonutComparisonCard } from "@/components/charts/donut-comparison-card";
 import { InfoCard } from "@/components/charts/info-card";
-import { SectionTabs, type SectionTab } from "@/components/layout/section-tabs";
+import { type SectionTab, SectionTabs } from "@/components/layout/section-tabs";
 import type { LastenTaakveld } from "../api";
 import { useLasten } from "../hooks/use-lasten";
 import { LASTEN_PAGINAS, categorieSeries, donutSide, trendSeries, verdelingCategories } from "./lasten-charts";
@@ -65,6 +65,17 @@ export function LastenPageView({ taakveld }: { taakveld: LastenTaakveld }) {
                     expandable
                 />
 
+                {verdeling && (
+                    <DonutComparisonCard
+                        title={pagina.donutTitle}
+                        categories={verdelingCategories(verdeling)}
+                        left={donutSide(verdeling, verdeling.links)}
+                        right={donutSide(verdeling, verdeling.rechts)}
+                        expandable
+                        className="col-span-2"
+                    />
+                )}
+
                 {/* Without a referentiegroep there are no gemeenten to draw, so the card says
                     so rather than showing an empty chart. */}
                 {referentiegroep.length > 0 || isLoading ? (
@@ -81,10 +92,7 @@ export function LastenPageView({ taakveld }: { taakveld: LastenTaakveld }) {
                         expandable
                     />
                 ) : (
-                    <InfoCard
-                        title="Referentiegroep"
-                        paragraphs={["Kies gemeenten in de referentiegroep om hun lasten naast elkaar te zien."]}
-                    />
+                    <InfoCard title="Referentiegroep" paragraphs={["Kies gemeenten in de referentiegroep om hun lasten naast elkaar te zien."]} />
                 )}
 
                 <ChartCard
@@ -95,17 +103,6 @@ export function LastenPageView({ taakveld }: { taakveld: LastenTaakveld }) {
                     isLoading={isLoading}
                     expandable
                 />
-
-                {verdeling && (
-                    <DonutComparisonCard
-                        title={pagina.donutTitle}
-                        categories={verdelingCategories(verdeling)}
-                        left={donutSide(verdeling, verdeling.links)}
-                        right={donutSide(verdeling, verdeling.rechts)}
-                        expandable
-                        className="col-span-2"
-                    />
-                )}
             </section>
         </div>
     );

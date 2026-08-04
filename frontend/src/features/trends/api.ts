@@ -16,7 +16,7 @@ export interface VerdelingPayload {
     data: Record<string, string | number | null>[];
 }
 
-export interface GemeentelijkeStand {
+export interface TrendsData {
     jaar: number | null;
     verslagsoort?: string;
     /** Only the cohorts that have something in them: landelijk always, the rest on selection. */
@@ -33,7 +33,7 @@ export interface GemeentelijkeStand {
  * No gemeente: this page's charts compare inwonergroepen and nothing else, the shape the
  * Power BI report draws them in, so there is no single-gemeente line to draw.
  */
-export interface GemeentelijkeStandParams {
+export interface TrendsParams {
     jaar?: number | null;
     verslagsoort?: string | null;
     /** Comma-joined inwonergroep ids, as the URL carries them. */
@@ -57,7 +57,7 @@ export interface GemeentelijkeStandParams {
  * The whole page in one request. It draws fourteen charts off a single filter selection,
  * so an endpoint per chart would mean fourteen round trips on every dropdown change.
  */
-export async function fetchGemeentelijkeStand(params: GemeentelijkeStandParams): Promise<GemeentelijkeStand> {
+export async function fetchTrends(params: TrendsParams): Promise<TrendsData> {
     const query = new URLSearchParams();
 
     if (params.jaar) query.set("jaar", String(params.jaar));
