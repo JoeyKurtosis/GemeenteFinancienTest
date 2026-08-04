@@ -9,7 +9,20 @@ export interface User {
     avatar_url?: string;
 }
 
-export async function login(email: string, password: string): Promise<User> {
+export interface LoginResponse {
+    requires_2fa?: boolean;
+    detail?: string;
+    expires_in_seconds?: number;
+}
+
+export interface PasswordResetTokenDetails {
+    email: string;
+    token: string;
+}
+
+// ── Login & Auth ──
+
+export async function login(email: string, password: string): Promise<User | LoginResponse> {
     const response = await fetch("/api/auth/login/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -17,12 +30,42 @@ export async function login(email: string, password: string): Promise<User> {
         body: JSON.stringify({ email, password }),
     });
 
-    if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok && response.status !== 202) {
         throw new Error(data.detail || "Inloggen mislukt");
     }
 
-    return response.json();
+    return data;
+}
+
+export async function verifyTwoFactorCode(code: string): Promise<User> {
+    const response = await fetch("/api/auth/2fa/verify/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ code }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw new Error(data.detail || "2FA verificatie mislukt.");
+    }
+
+    return data;
+}
+
+export async function resendTwoFactorCode(): Promise<{ detail: string; expires_in_seconds: number }> {
+    const response = await fetch("/api/auth/2fa/resend/", {
+        method: "POST",
+        credentials: "include",
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw new Error(data.detail || "Kon 2FA code niet opnieuw versturen.");
+    }
+
+    return data;
 }
 
 export async function logout(): Promise<void> {
@@ -60,6 +103,8 @@ export async function signup(name: string, email: string, password: string): Pro
     return response.json();
 }
 
+// ── Password Reset ──
+
 export async function requestPasswordReset(email: string): Promise<void> {
     const response = await fetch("/api/auth/password-reset/request/", {
         method: "POST",
@@ -73,3 +118,28 @@ export async function requestPasswordReset(email: string): Promise<void> {
         throw new Error(data.detail || "Verzoek mislukt");
     }
 }
+
+export async function getPasswordResetTokenDetails(token: string): Promise<PasswordResetTokenDetails> {
+    const response = await fetch(`/api/auth/password-reset/${token}/`);
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+        throw new Error(data.detail || "Reset link is ongeldig.");
+    }
+
+    return data;
+}
+
+export async function confirmPasswordReset(token: string, password: string): Promise<void> {
+    const response = await fetch("/api/auth/password-reset/confirm/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, password }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw new Error(data.detail || "Kon wachtwoord niet resetten.");
+    }
+}
+

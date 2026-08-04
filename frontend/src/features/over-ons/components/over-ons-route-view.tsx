@@ -1,5 +1,3 @@
-import { Play } from "@untitledui/icons";
-
 export function OverOnsRouteView() {
     return (
         <section className="space-y-10">
