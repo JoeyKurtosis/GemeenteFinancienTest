@@ -41,7 +41,7 @@ export function OverOnsRouteView() {
                     </div>
                 </div>
 
-                <img src="./denhaag.jpg" alt="denhaag" className="max-h-[500px] w-auto w-full rounded-xl" />
+                <img src="./denhaag.jpg" alt="denhaag" className="max-h-125 w-auto w-full rounded-xl" />
             </div>
         </section>
     );

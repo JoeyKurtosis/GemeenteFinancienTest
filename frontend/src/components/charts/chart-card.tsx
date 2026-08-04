@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { Expand06, XClose } from "@untitledui/icons";
+import { Expand06, MessageChatSquare, XClose } from "@untitledui/icons";
+import type { ChartComment } from "@/features/comments";
+import { ChartCommentButton } from "@/features/comments";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, LabelList, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartLegendContent, ChartTooltipContent } from "@/components/application/charts/charts-base";
 import { Dialog, DialogTrigger, Modal, ModalOverlay } from "@/components/application/modals/modal";
@@ -93,6 +95,12 @@ interface ChartCardProps {
      */
     maxHeight?: number;
     className?: string;
+    /** Stable identifier for the comment system (e.g. "begroting:Uitgaven per jaar"). */
+    chartId?: string;
+    /** The user's existing comment for this chart, if any. */
+    comment?: ChartComment;
+    /** Called after a comment is saved or deleted to refresh the cache. */
+    onCommentChange?: () => void;
 }
 
 export function ChartCard({
@@ -111,6 +119,9 @@ export function ChartCard({
     isLoading = false,
     maxHeight,
     className,
+    chartId,
+    comment,
+    onCommentChange,
 }: ChartCardProps) {
     const [isExpanded, setIsExpanded] = useState(false);
 
@@ -121,15 +132,20 @@ export function ChartCard({
             <div className={cx("rounded-xl bg-primary shadow-xs ring-1 ring-secondary ring-inset", className)}>
                 <div className="flex items-center justify-between px-5 pt-5 pb-1">
                     <h3 className="text-md font-semibold text-primary">{title}</h3>
-                    {expandable && !isLoading && (
-                        <button
-                            type="button"
-                            onClick={() => setIsExpanded(true)}
-                            className="rounded-md p-1.5 text-fg-quaternary transition duration-100 ease-linear hover:bg-secondary_hover hover:text-fg-quaternary_hover"
-                        >
-                            <Expand06 className="size-5" aria-hidden="true" />
-                        </button>
-                    )}
+                    <div className="flex items-center gap-1">
+                        {chartId && onCommentChange && !isLoading && (
+                            <ChartCommentButton chartId={chartId} comment={comment} onSaved={onCommentChange} />
+                        )}
+                        {expandable && !isLoading && (
+                            <button
+                                type="button"
+                                onClick={() => setIsExpanded(true)}
+                                className="rounded-md p-1.5 text-fg-quaternary transition duration-100 ease-linear hover:bg-secondary_hover hover:text-fg-quaternary_hover"
+                            >
+                                <Expand06 className="size-5" aria-hidden="true" />
+                            </button>
+                        )}
+                    </div>
                 </div>
                 <div className="px-5 pb-5">{isLoading ? <ChartSkeleton /> : <ChartContent {...chartContentProps} maxHeight={maxHeight} />}</div>
             </div>
@@ -153,6 +169,12 @@ export function ChartCard({
                                     {/* Expanding is what you do to see the long list, so the
                                         cap is roomier here — it still scrolls, in a taller box. */}
                                     <ChartContent {...chartContentProps} height={500} maxHeight={maxHeight ? 560 : undefined} expanded />
+                                    {comment?.text && (
+                                        <div className="mt-4 flex gap-2 rounded-lg bg-secondary p-3">
+                                            <MessageChatSquare className="mt-0.5 size-4 shrink-0 text-brand-secondary" aria-hidden="true" />
+                                            <p className="text-sm text-secondary whitespace-pre-wrap">{comment.text}</p>
+                                        </div>
+                                    )}
                                 </div>
                             </Dialog>
                         </Modal>

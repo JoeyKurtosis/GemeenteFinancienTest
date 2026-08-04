@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     "support",
     "iv3",
     "chat",
+    "comments",
 ]
 
 MIDDLEWARE = [

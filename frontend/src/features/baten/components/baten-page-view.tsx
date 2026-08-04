@@ -2,6 +2,7 @@ import { ChartCard } from "@/components/charts/chart-card";
 import { DonutComparisonCard } from "@/components/charts/donut-comparison-card";
 import { InfoCard } from "@/components/charts/info-card";
 import { SectionTabs, type SectionTab } from "@/components/layout/section-tabs";
+import { useChartComments } from "@/features/comments";
 import type { BatenBron } from "../api";
 import { useBaten } from "../hooks/use-baten";
 import { BATEN_PAGINAS, donutSide, trendSeries, verdelingCategories } from "./baten-charts";
@@ -37,6 +38,9 @@ export function BatenPageView({ bron }: { bron: BatenBron }) {
     const verdeling = data?.verdeling ?? null;
     const referentiegroep = data?.referentiegroep ?? [];
 
+    const chartIds = [`baten:Referentiegroep:${bron}`, `baten:Trend:${bron}`];
+    const { commentsMap, invalidate } = useChartComments(chartIds);
+
     return (
         <div className="flex flex-col gap-6">
             <SectionTabs items={batenTabs} />
@@ -53,10 +57,11 @@ export function BatenPageView({ bron }: { bron: BatenBron }) {
                         chartType="horizontal-bar"
                         showLegend={false}
                         isLoading={isLoading}
-                        // A referentiegroep can run to every gemeente in the country, so the
-                        // bars scroll inside the card rather than stretching it down the page.
                         maxHeight={420}
                         expandable
+                        chartId={`baten:Referentiegroep:${bron}`}
+                        comment={commentsMap.get(`baten:Referentiegroep:${bron}`)}
+                        onCommentChange={invalidate}
                     />
                 ) : (
                     <InfoCard
@@ -84,6 +89,9 @@ export function BatenPageView({ bron }: { bron: BatenBron }) {
                     isLoading={isLoading}
                     expandable
                     className="col-span-2"
+                    chartId={`baten:Trend:${bron}`}
+                    comment={commentsMap.get(`baten:Trend:${bron}`)}
+                    onCommentChange={invalidate}
                 />
             </section>
         </div>

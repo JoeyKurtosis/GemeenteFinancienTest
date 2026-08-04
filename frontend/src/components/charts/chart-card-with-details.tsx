@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { Expand06, XClose } from "@untitledui/icons";
+import { Expand06, MessageChatSquare, XClose } from "@untitledui/icons";
 import { Dialog, DialogTrigger, Modal, ModalOverlay } from "@/components/application/modals/modal";
 import type { ChartSeries, ChartType, ValueFormat } from "@/components/charts/chart-card";
 import { ChartContent } from "@/components/charts/chart-card";
 import { ChartSkeleton } from "@/components/charts/chart-skeleton";
 import { HighlightCard, type HighlightCardData } from "@/components/charts/highlight-card";
+import type { ChartComment } from "@/features/comments";
+import { ChartCommentButton } from "@/features/comments";
 import { cx } from "@/utils/cx";
 
 interface ChartCardWithDetailsProps {
@@ -25,6 +27,9 @@ interface ChartCardWithDetailsProps {
     /** Show a skeleton placeholder instead of the chart while data loads. */
     isLoading?: boolean;
     className?: string;
+    chartId?: string;
+    comment?: ChartComment;
+    onCommentChange?: () => void;
 }
 
 export function ChartCardWithDetails({
@@ -43,6 +48,9 @@ export function ChartCardWithDetails({
     expandable = false,
     isLoading = false,
     className,
+    chartId,
+    comment,
+    onCommentChange,
 }: ChartCardWithDetailsProps) {
     const [isExpanded, setIsExpanded] = useState(false);
 
@@ -64,7 +72,12 @@ export function ChartCardWithDetails({
             <div className={cx("rounded-xl bg-primary shadow-xs ring-1 ring-secondary ring-inset", className)}>
                 <div className="flex items-center justify-between px-5 pt-5 pb-1">
                     <h3 className="text-md font-semibold text-primary">{title}</h3>
-                    {expandButton}
+                    <div className="flex items-center gap-1">
+                        {chartId && onCommentChange && !isLoading && (
+                            <ChartCommentButton chartId={chartId} comment={comment} onSaved={onCommentChange} />
+                        )}
+                        {expandButton}
+                    </div>
                 </div>
 
                 <div className="flex flex-col gap-6 px-5 pb-5 lg:flex-row">
@@ -150,6 +163,12 @@ export function ChartCardWithDetails({
                                             <ChartContent {...chartContentProps} height={500} expanded />
                                         </div>
                                     </div>
+                                    {comment?.text && (
+                                        <div className="mt-4 flex gap-2 rounded-lg bg-secondary p-3">
+                                            <MessageChatSquare className="mt-0.5 size-4 shrink-0 text-brand-secondary" aria-hidden="true" />
+                                            <p className="text-sm text-secondary whitespace-pre-wrap">{comment.text}</p>
+                                        </div>
+                                    )}
                                 </div>
                             </Dialog>
                         </Modal>
