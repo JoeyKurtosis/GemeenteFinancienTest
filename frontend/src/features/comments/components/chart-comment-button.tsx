@@ -1,10 +1,7 @@
 import { useRef, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { MessageChatSquare } from "@untitledui/icons";
 import { Button as AriaButton, Dialog as AriaDialog, DialogTrigger as AriaDialogTrigger, Popover as AriaPopover } from "react-aria-components";
 import { Button } from "@/components/base/buttons/button";
-import { Tooltip } from "@/components/base/tooltip/tooltip";
-import { useAuth } from "@/features/auth";
 import { cx } from "@/utils/cx";
 import type { ChartComment } from "../api";
 import { deleteComment, saveComment } from "../api";
@@ -19,7 +16,6 @@ export function ChartCommentButton({ chartId, comment, onSaved }: ChartCommentBu
     const [text, setText] = useState(comment?.text ?? "");
     const [isSaving, setIsSaving] = useState(false);
     const triggerRef = useRef<HTMLButtonElement>(null);
-    const { isAuthenticated } = useAuth();
     const hasComment = !!comment;
 
     function handleOpen(isOpen: boolean) {

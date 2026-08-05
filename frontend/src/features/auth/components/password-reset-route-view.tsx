@@ -23,7 +23,7 @@ function RequirementItem({ ok, label }: { ok: boolean; label: string }) {
 export function PasswordResetRouteView() {
     const navigate = useNavigate();
     const location = useRouterState({ select: (s) => s.location });
-    const token = useMemo(() => new URLSearchParams(location.search).get("token") ?? "", [location.search]);
+    const token = useMemo(() => new URLSearchParams(location.searchStr).get("token") ?? "", [location.searchStr]);
 
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
