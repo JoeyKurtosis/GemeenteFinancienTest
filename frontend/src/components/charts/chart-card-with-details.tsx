@@ -6,6 +6,7 @@ import { ChartContent } from "@/components/charts/chart-card";
 import { ChartDownloadButton } from "@/components/charts/chart-download-button";
 import { ChartSkeleton } from "@/components/charts/chart-skeleton";
 import { HighlightCard, type HighlightCardData } from "@/components/charts/highlight-card";
+import { useAuth } from "@/features/auth";
 import type { ChartComment } from "@/features/comments";
 import { ChartCommentButton } from "@/features/comments";
 import { cx } from "@/utils/cx";
@@ -54,6 +55,7 @@ export function ChartCardWithDetails({
     onCommentChange,
 }: ChartCardWithDetailsProps) {
     const [isExpanded, setIsExpanded] = useState(false);
+    const { isAuthenticated } = useAuth();
 
     const chartContentProps = { data, series, chartType, xAxisKey, xAxisLabel, yAxisLabel, showLegend, valueFormat };
 
@@ -78,10 +80,10 @@ export function ChartCardWithDetails({
                 <div className="flex items-center justify-between px-5 pt-5 pb-1">
                     <h3 className="text-md font-semibold text-primary">{title}</h3>
                     <div className="flex items-center gap-1">
-                        {chartId && onCommentChange && !isLoading && (
+                        {isAuthenticated && chartId && onCommentChange && !isLoading && (
                             <ChartCommentButton chartId={chartId} comment={comment} onSaved={onCommentChange} />
                         )}
-                        {downloadButton}
+                        {isAuthenticated && downloadButton}
                         {expandButton}
                     </div>
                 </div>
@@ -175,7 +177,7 @@ export function ChartCardWithDetails({
                                     {comment?.text && (
                                         <div className="mt-4 flex gap-2 rounded-lg bg-secondary p-3">
                                             <MessageChatSquare className="mt-0.5 size-4 shrink-0 text-brand-secondary" aria-hidden="true" />
-                                            <p className="text-sm text-secondary whitespace-pre-wrap">{comment.text}</p>
+                                            <p className="text-sm whitespace-pre-wrap text-secondary">{comment.text}</p>
                                         </div>
                                     )}
                                 </div>

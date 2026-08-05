@@ -1,13 +1,16 @@
 import { useState } from "react";
 import { Expand06, MessageChatSquare, XClose } from "@untitledui/icons";
-import type { ChartComment } from "@/features/comments";
-import { ChartCommentButton } from "@/features/comments";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, LabelList, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartLegendContent, ChartTooltipContent } from "@/components/application/charts/charts-base";
 import { Dialog, DialogTrigger, Modal, ModalOverlay } from "@/components/application/modals/modal";
 import { ChartDownloadButton } from "@/components/charts/chart-download-button";
 import { ChartSkeleton } from "@/components/charts/chart-skeleton";
+import { useAuth } from "@/features/auth";
+import type { ChartComment } from "@/features/comments";
+import { ChartCommentButton } from "@/features/comments";
 import { cx } from "@/utils/cx";
+
+useAuth;
 
 export interface ChartSeries {
     key: string;
@@ -125,6 +128,7 @@ export function ChartCard({
     onCommentChange,
 }: ChartCardProps) {
     const [isExpanded, setIsExpanded] = useState(false);
+    const { isAuthenticated } = useAuth();
 
     const chartContentProps = { data, series, chartType, xAxisKey, xAxisLabel, yAxisLabel, showLegend, valueFormat, normalize, totals };
 
@@ -149,10 +153,10 @@ export function ChartCard({
                 <div className="flex items-center justify-between px-5 pt-5 pb-1">
                     <h3 className="text-md font-semibold text-primary">{title}</h3>
                     <div className="flex items-center gap-1">
-                        {chartId && onCommentChange && !isLoading && (
+                        {isAuthenticated && chartId && onCommentChange && !isLoading && (
                             <ChartCommentButton chartId={chartId} comment={comment} onSaved={onCommentChange} />
                         )}
-                        {downloadButton}
+                        {isAuthenticated && downloadButton}
                         {expandable && !isLoading && (
                             <button
                                 type="button"
@@ -192,7 +196,7 @@ export function ChartCard({
                                     {comment?.text && (
                                         <div className="mt-4 flex gap-2 rounded-lg bg-secondary p-3">
                                             <MessageChatSquare className="mt-0.5 size-4 shrink-0 text-brand-secondary" aria-hidden="true" />
-                                            <p className="text-sm text-secondary whitespace-pre-wrap">{comment.text}</p>
+                                            <p className="text-sm whitespace-pre-wrap text-secondary">{comment.text}</p>
                                         </div>
                                     )}
                                 </div>
@@ -309,9 +313,7 @@ export function ChartContent({
         const rows = normalize
             ? data.map((entry, index) => ({
                   ...entry,
-                  ...Object.fromEntries(
-                      series.map((s) => [s.key, totalPerRow[index] ? ((Number(entry[s.key]) || 0) / totalPerRow[index]) * 100 : 0]),
-                  ),
+                  ...Object.fromEntries(series.map((s) => [s.key, totalPerRow[index] ? ((Number(entry[s.key]) || 0) / totalPerRow[index]) * 100 : 0])),
               }))
             : data;
 
@@ -343,11 +345,7 @@ export function ChartContent({
                                 {...sharedAxisProps}
                                 domain={normalize ? [0, 100] : undefined}
                                 ticks={normalize ? [0, 50, 100] : undefined}
-                                tickFormatter={
-                                    normalize
-                                        ? (value: unknown) => `${value}%`
-                                        : (value: unknown) => format(Number(value) || 0)
-                                }
+                                tickFormatter={normalize ? (value: unknown) => `${value}%` : (value: unknown) => format(Number(value) || 0)}
                             />
                             {tooltip}
                             {series.map((s, i) => (
@@ -397,9 +395,7 @@ export function ChartContent({
                                                 const entry = data[index ?? 0];
                                                 // The measured total where the caller has one;
                                                 // the segments only add up to it by luck.
-                                                const total =
-                                                    totals?.[index ?? 0] ??
-                                                    series.reduce((sum, s) => sum + (Number(entry?.[s.key]) || 0), 0);
+                                                const total = totals?.[index ?? 0] ?? series.reduce((sum, s) => sum + (Number(entry?.[s.key]) || 0), 0);
                                                 return (
                                                     <text
                                                         x={(x as number) + (width as number) + 8}

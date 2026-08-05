@@ -1,7 +1,10 @@
 import { useRef, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { MessageChatSquare } from "@untitledui/icons";
 import { Button as AriaButton, Dialog as AriaDialog, DialogTrigger as AriaDialogTrigger, Popover as AriaPopover } from "react-aria-components";
 import { Button } from "@/components/base/buttons/button";
+import { Tooltip } from "@/components/base/tooltip/tooltip";
+import { useAuth } from "@/features/auth";
 import { cx } from "@/utils/cx";
 import type { ChartComment } from "../api";
 import { deleteComment, saveComment } from "../api";
@@ -16,6 +19,7 @@ export function ChartCommentButton({ chartId, comment, onSaved }: ChartCommentBu
     const [text, setText] = useState(comment?.text ?? "");
     const [isSaving, setIsSaving] = useState(false);
     const triggerRef = useRef<HTMLButtonElement>(null);
+    const { isAuthenticated } = useAuth();
     const hasComment = !!comment;
 
     function handleOpen(isOpen: boolean) {
@@ -65,11 +69,7 @@ export function ChartCommentButton({ chartId, comment, onSaved }: ChartCommentBu
             >
                 <MessageChatSquare className="size-5" aria-hidden="true" />
             </AriaButton>
-            <AriaPopover
-                triggerRef={triggerRef}
-                placement="bottom end"
-                className="w-80 rounded-xl bg-primary shadow-lg ring-1 ring-secondary ring-inset"
-            >
+            <AriaPopover triggerRef={triggerRef} placement="bottom end" className="w-80 rounded-xl bg-primary shadow-lg ring-1 ring-secondary ring-inset">
                 <AriaDialog className="flex flex-col gap-3 p-4 outline-hidden">
                     {({ close }) => (
                         <>
