@@ -1,14 +1,14 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { login as loginRequest, logout as logoutRequest, me } from "../api";
-import type { User } from "../api";
+import type { LoginResponse, User } from "../api";
 
 interface AuthContextValue {
     user: User | null;
     isLoading: boolean;
     isAuthenticated: boolean;
     isAdmin: boolean;
-    login: (email: string, password: string) => Promise<User>;
+    login: (email: string, password: string) => Promise<User | LoginResponse>;
     logout: () => Promise<void>;
     setUser: (user: User | null) => void;
 }
@@ -41,9 +41,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const login = async (email: string, password: string) => {
-        const loggedInUser = await loginRequest(email, password);
-        setUser(loggedInUser);
-        return loggedInUser;
+        const response = await loginRequest(email, password);
+        if ("requires_2fa" in response && response.requires_2fa) {
+            return response;
+        }
+        setUser(response as User);
+        return response;
     };
 
     const logout = async () => {

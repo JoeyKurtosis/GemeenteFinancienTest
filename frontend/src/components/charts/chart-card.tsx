@@ -1,10 +1,16 @@
-import { useState } from "react";
-import { Expand06, XClose } from "@untitledui/icons";
+import { useEffect, useState } from "react";
+import { Expand06, MessageChatSquare, XClose } from "@untitledui/icons";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, LabelList, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartLegendContent, ChartTooltipContent } from "@/components/application/charts/charts-base";
 import { Dialog, DialogTrigger, Modal, ModalOverlay } from "@/components/application/modals/modal";
+import { ChartDownloadButton } from "@/components/charts/chart-download-button";
 import { ChartSkeleton } from "@/components/charts/chart-skeleton";
+import { useAuth } from "@/features/auth";
+import type { ChartComment } from "@/features/comments";
+import { ChartCommentButton, formatCommentDate, useChartAnchor } from "@/features/comments";
 import { cx } from "@/utils/cx";
+
+useAuth;
 
 export interface ChartSeries {
     key: string;
@@ -93,6 +99,12 @@ interface ChartCardProps {
      */
     maxHeight?: number;
     className?: string;
+    /** Stable identifier for the comment system (e.g. "begroting:Uitgaven per jaar"). */
+    chartId?: string;
+    /** The user's existing comment for this chart, if any. */
+    comment?: ChartComment;
+    /** Called after a comment is saved or deleted to refresh the cache. */
+    onCommentChange?: () => void;
 }
 
 export function ChartCard({
@@ -111,25 +123,66 @@ export function ChartCard({
     isLoading = false,
     maxHeight,
     className,
+    chartId,
+    comment,
+    onCommentChange,
 }: ChartCardProps) {
     const [isExpanded, setIsExpanded] = useState(false);
+    const { isAuthenticated } = useAuth();
+    // Lets a note in het notities-overzicht link back to this exact card. Arriving on that link
+    // opens the chart at full size, where the note is printed under it.
+    const { ref: anchorRef, anchorId, shouldExpand } = useChartAnchor(chartId, isLoading);
+
+    useEffect(() => {
+        if (shouldExpand && expandable) setIsExpanded(true);
+    }, [shouldExpand, expandable]);
 
     const chartContentProps = { data, series, chartType, xAxisKey, xAxisLabel, yAxisLabel, showLegend, valueFormat, normalize, totals };
 
+    // The same figures the chart is drawn from, as a spreadsheet. `normalize` goes along because
+    // it decides whether these values read as amounts or as shares — see buildChartSheet.
+    const downloadButton = !isLoading ? (
+        <ChartDownloadButton
+            title={title}
+            data={data}
+            series={series}
+            xAxisKey={xAxisKey}
+            xAxisLabel={xAxisLabel}
+            valueFormat={valueFormat}
+            normalize={normalize}
+            totals={totals}
+        />
+    ) : null;
+
     return (
         <>
-            <div className={cx("rounded-xl bg-primary shadow-xs ring-1 ring-secondary ring-inset", className)}>
+            <div
+                ref={anchorRef}
+                id={anchorId}
+                className={cx(
+                    "scroll-mt-24 rounded-xl bg-primary shadow-xs ring-1 ring-secondary ring-inset",
+                    // Arrived here from a link to this chart: say which one was meant.
+                    "target:ring-2 target:ring-brand",
+                    className,
+                )}
+            >
                 <div className="flex items-center justify-between px-5 pt-5 pb-1">
                     <h3 className="text-md font-semibold text-primary">{title}</h3>
-                    {expandable && !isLoading && (
-                        <button
-                            type="button"
-                            onClick={() => setIsExpanded(true)}
-                            className="rounded-md p-1.5 text-fg-quaternary transition duration-100 ease-linear hover:bg-secondary_hover hover:text-fg-quaternary_hover"
-                        >
-                            <Expand06 className="size-5" aria-hidden="true" />
-                        </button>
-                    )}
+                    <div className="flex items-center gap-1">
+                        {isAuthenticated && chartId && onCommentChange && !isLoading && (
+                            <ChartCommentButton chartId={chartId} comment={comment} onSaved={onCommentChange} />
+                        )}
+                        {isAuthenticated && downloadButton}
+                        {expandable && !isLoading && (
+                            <button
+                                type="button"
+                                onClick={() => setIsExpanded(true)}
+                                className="rounded-md p-1.5 text-fg-quaternary transition duration-100 ease-linear hover:bg-secondary_hover hover:text-fg-quaternary_hover"
+                            >
+                                <Expand06 className="size-5" aria-hidden="true" />
+                            </button>
+                        )}
+                    </div>
                 </div>
                 <div className="px-5 pb-5">{isLoading ? <ChartSkeleton /> : <ChartContent {...chartContentProps} maxHeight={maxHeight} />}</div>
             </div>
@@ -142,17 +195,29 @@ export function ChartCard({
                                 <div className="w-full rounded-xl bg-primary p-6 shadow-lg">
                                     <div className="mb-4 flex items-center justify-between">
                                         <h3 className="text-lg font-semibold text-primary">{title}</h3>
-                                        <button
-                                            type="button"
-                                            onClick={() => setIsExpanded(false)}
-                                            className="rounded-md p-1.5 text-fg-quaternary transition duration-100 ease-linear hover:bg-secondary_hover hover:text-fg-quaternary_hover"
-                                        >
-                                            <XClose className="size-5" aria-hidden="true" />
-                                        </button>
+                                        <div className="flex items-center gap-1">
+                                            {downloadButton}
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsExpanded(false)}
+                                                className="rounded-md p-1.5 text-fg-quaternary transition duration-100 ease-linear hover:bg-secondary_hover hover:text-fg-quaternary_hover"
+                                            >
+                                                <XClose className="size-5" aria-hidden="true" />
+                                            </button>
+                                        </div>
                                     </div>
                                     {/* Expanding is what you do to see the long list, so the
                                         cap is roomier here — it still scrolls, in a taller box. */}
                                     <ChartContent {...chartContentProps} height={500} maxHeight={maxHeight ? 560 : undefined} expanded />
+                                    {comment?.text && (
+                                        <div className="mt-4 flex gap-2 rounded-lg bg-secondary p-3">
+                                            <MessageChatSquare className="mt-0.5 size-4 shrink-0 text-brand-secondary" aria-hidden="true" />
+                                            <div className="flex flex-col gap-1">
+                                                <p className="text-sm whitespace-pre-wrap text-secondary">{comment.text}</p>
+                                                <p className="text-xs text-tertiary">Bijgewerkt op {formatCommentDate(comment.updated_at)}</p>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </Dialog>
                         </Modal>
@@ -267,9 +332,7 @@ export function ChartContent({
         const rows = normalize
             ? data.map((entry, index) => ({
                   ...entry,
-                  ...Object.fromEntries(
-                      series.map((s) => [s.key, totalPerRow[index] ? ((Number(entry[s.key]) || 0) / totalPerRow[index]) * 100 : 0]),
-                  ),
+                  ...Object.fromEntries(series.map((s) => [s.key, totalPerRow[index] ? ((Number(entry[s.key]) || 0) / totalPerRow[index]) * 100 : 0])),
               }))
             : data;
 
@@ -301,11 +364,7 @@ export function ChartContent({
                                 {...sharedAxisProps}
                                 domain={normalize ? [0, 100] : undefined}
                                 ticks={normalize ? [0, 50, 100] : undefined}
-                                tickFormatter={
-                                    normalize
-                                        ? (value: unknown) => `${value}%`
-                                        : (value: unknown) => format(Number(value) || 0)
-                                }
+                                tickFormatter={normalize ? (value: unknown) => `${value}%` : (value: unknown) => format(Number(value) || 0)}
                             />
                             {tooltip}
                             {series.map((s, i) => (
@@ -355,9 +414,7 @@ export function ChartContent({
                                                 const entry = data[index ?? 0];
                                                 // The measured total where the caller has one;
                                                 // the segments only add up to it by luck.
-                                                const total =
-                                                    totals?.[index ?? 0] ??
-                                                    series.reduce((sum, s) => sum + (Number(entry?.[s.key]) || 0), 0);
+                                                const total = totals?.[index ?? 0] ?? series.reduce((sum, s) => sum + (Number(entry?.[s.key]) || 0), 0);
                                                 return (
                                                     <text
                                                         x={(x as number) + (width as number) + 8}

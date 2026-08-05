@@ -1,6 +1,6 @@
 import { serializeApplied, serializeCodes, useFilters } from "@/features/filters";
 import { useChartQuery } from "@/hooks/use-chart-query";
-import { fetchGemeentelijkeStand } from "../api";
+import { fetchTrends } from "../api";
 
 /**
  * The page's data, refetched whenever the *applied* filters change — the pending
@@ -9,7 +9,7 @@ import { fetchGemeentelijkeStand } from "../api";
  * The applied filters live in the URL (see FiltersProvider), so a filtered view of this
  * page can be shared and survives a reload. They are also the cache key — see useChartQuery.
  */
-export function useGemeentelijkeStand() {
+export function useTrends() {
     const { applied, options, isReady } = useFilters();
 
     // The multi-selects are react-aria Selections: either a Set or the literal "all", the
@@ -25,7 +25,7 @@ export function useGemeentelijkeStand() {
             : [...applied.inwonergroepen].map(String);
 
     return useChartQuery({
-        feature: "gemeentelijke-stand",
+        feature: "trends",
         params: {
             // No gemeente: the charts compare inwonergroepen, so there is no single-gemeente line.
             jaar: applied.jaar,
@@ -38,6 +38,6 @@ export function useGemeentelijkeStand() {
             reserve: applied.reservemutaties,
         },
         enabled: isReady,
-        fetcher: fetchGemeentelijkeStand,
+        fetcher: fetchTrends,
     });
 }

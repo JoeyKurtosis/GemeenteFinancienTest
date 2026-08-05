@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     "support",
     "iv3",
     "chat",
+    "comments",
 ]
 
 MIDDLEWARE = [
@@ -163,12 +164,15 @@ DEFAULT_FROM_EMAIL = "noreply@gemeentefinancien.nl"
 if DEBUG:
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 else:
-    EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
-    EMAIL_HOST = os.getenv("EMAIL_HOST", "")
-    EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
-    EMAIL_USE_TLS = True
-    EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
-    EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+    EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django_ses.SESBackend")
+    # AWS SES settings (used when EMAIL_BACKEND is django_ses.SESBackend)
+    AWS_SES_REGION_NAME = os.getenv("AWS_SES_REGION_NAME", "eu-west-1")
+    AWS_SES_REGION_ENDPOINT = os.getenv(
+        "AWS_SES_REGION_ENDPOINT",
+        f"email.{AWS_SES_REGION_NAME}.amazonaws.com",
+    )
+    # AWS credentials are resolved from the instance/task IAM role by default.
+    # Set AWS_SES_ACCESS_KEY_ID and AWS_SES_SECRET_ACCESS_KEY to override.
 
 # Production security
 if not DEBUG:

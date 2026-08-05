@@ -1,4 +1,5 @@
 import { ChartCardWithDetails } from "@/components/charts/chart-card-with-details";
+import { useChartComments } from "@/features/comments";
 import { useFilters } from "@/features/filters";
 import { useManagementoverzicht } from "../hooks/use-managementoverzicht";
 import { managementoverzichtPagina } from "./managementoverzicht-charts";
@@ -21,6 +22,12 @@ export function ManagementoverzichtRouteView() {
 
     const pagina = managementoverzichtPagina(data);
 
+    const allChartIds = [
+        ...pagina.begroting.map((k) => `managementoverzicht:${k.title}`),
+        ...pagina.salarislasten.map((k) => `managementoverzicht:${k.title}`),
+    ];
+    const { commentsMap, invalidate } = useChartComments(allChartIds);
+
     // The verslagsoort the payload was actually drawn from, not the one the sidebar asked for:
     // ChartView._resolve_verslagsoort may substitute another code for a year that has none.
     // Labelled off the filter options rather than from a suffix table of its own, so "Begroting"
@@ -36,7 +43,15 @@ export function ManagementoverzichtRouteView() {
                 </h2>
 
                 {pagina.begroting.map((kaart) => (
-                    <ChartCardWithDetails key={kaart.title} {...kaart} isLoading={isLoading} expandable />
+                    <ChartCardWithDetails
+                        key={kaart.title}
+                        {...kaart}
+                        isLoading={isLoading}
+                        expandable
+                        chartId={`managementoverzicht:${kaart.title}`}
+                        comment={commentsMap.get(`managementoverzicht:${kaart.title}`)}
+                        onCommentChange={invalidate}
+                    />
                 ))}
             </div>
 
@@ -45,7 +60,15 @@ export function ManagementoverzichtRouteView() {
                 <h2 className="pb-2 text-display-xs font-semibold text-primary">Salarislasten</h2>
 
                 {pagina.salarislasten.map((kaart) => (
-                    <ChartCardWithDetails key={kaart.title} {...kaart} isLoading={isLoading} expandable />
+                    <ChartCardWithDetails
+                        key={kaart.title}
+                        {...kaart}
+                        isLoading={isLoading}
+                        expandable
+                        chartId={`managementoverzicht:${kaart.title}`}
+                        comment={commentsMap.get(`managementoverzicht:${kaart.title}`)}
+                        onCommentChange={invalidate}
+                    />
                 ))}
             </div>
         </section>

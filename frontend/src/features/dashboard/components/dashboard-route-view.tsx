@@ -1,4 +1,4 @@
-import { BarChart02, Eye, FileCheck02, Users03 } from "@untitledui/icons";
+import { ArrowRight, BarChart02, Eye, FileCheck02, Users03 } from "@untitledui/icons";
 import Hero from "@/assets/icons/hero.svg?react";
 import Kurtosis from "@/assets/icons/kurtosis.svg?react";
 import { MetricsIcon02 } from "@/components/application/metrics/metrics";
@@ -19,12 +19,54 @@ export function DashboardRouteView() {
 
     return (
         <section className="space-y-8">
-            <div className="flex items-center gap-5">
-                <div>
-                    <h2 className="text-2xl font-semibold text-primary">{isAuthenticated ? `Welkom terug, ${firstName}` : "Welkom"}</h2>
-                    <p className="mt-1 text-tertiary capitalize">{formattedDate}</p>
+            <div className="rounded-xl bg-primary shadow-xs ring-1 ring-secondary ring-inset">
+                <div className="grid grid-cols-1 items-center gap-8 p-5 md:grid-cols-[auto_1fr] md:p-6 lg:gap-12">
+                    {/* ── Hero ── */}
+                    <div className="flex items-center justify-start">
+                        <Hero className="h-64 w-auto text-primary md:h-72" />
+                    </div>
+
+                    {/* ── Content ── */}
+                    <div className="flex min-w-0 flex-col gap-5">
+                        <div>
+                            <h2 className="text-xl font-semibold text-primary md:text-2xl">{isAuthenticated ? `Welkom terug, ${firstName}` : "Welkom"}</h2>
+                            <p className="mt-1 text-sm text-tertiary capitalize">{formattedDate}</p>
+                        </div>
+
+                        <div className="flex max-w-prose flex-col gap-3 text-sm text-secondary">
+                            <p>
+                                Het Gemeentefinanciën dashboard biedt inzicht in de inkomsten en uitgaven van gemeenten in Nederland. Het bevat ook informatie
+                                over gemeentelijke belastingen, schulden en woonlasten.
+                            </p>
+                            <p>
+                                De gegevens zijn afkomstig van het CBS (Centraal Bureau voor de Statistiek) en worden jaarlijks bijgewerkt op basis van de
+                                IV3-gegevens die gemeenten aanleveren.
+                            </p>
+                        </div>
+
+                        <div className="flex max-w-prose flex-col gap-1">
+                            <h3 className="text-sm font-semibold text-brand-secondary">Wat kun je hier vinden?</h3>
+                            <p className="text-sm text-secondary">
+                                Vergelijk begrotingen en jaarrekeningen, bekijk trends over meerdere jaren, en benchmark jouw gemeente tegen vergelijkbare
+                                gemeenten.
+                            </p>
+                        </div>
+
+                        <div>
+                            <Button href="/over-ons" color="link-color" iconTrailing={ArrowRight}>
+                                Lees meer
+                            </Button>
+                        </div>
+                    </div>
                 </div>
-                <Hero className="text-primary" />
+
+                {/* ── Footer ── */}
+                <div className="flex items-center justify-end gap-3 border-t border-secondary px-5 py-4">
+                    <p className="text-sm text-tertiary">Ontwikkeld door</p>
+                    <a href="https://www.kurtosis.nl/" target="_blank">
+                        <Kurtosis className="h-5 w-auto" />
+                    </a>
+                </div>
             </div>
 
             {!isAuthenticated && <SignupCtaBanner />}
@@ -61,9 +103,9 @@ export function DashboardRouteView() {
                     footer={
                         <div className="flex gap-3">
                             <Button href="/baten" color="secondary">
-                                Absoluut
+                                Baten
                             </Button>
-                            <Button href="/lasten">Per Inwoner</Button>
+                            <Button href="/lasten">Lasten</Button>
                         </div>
                     }
                 />

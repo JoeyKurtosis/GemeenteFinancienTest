@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Expand06, XClose } from "@untitledui/icons";
 import { ChartLegendContent } from "@/components/application/charts/charts-base";
+import { ChartDownloadButton } from "@/components/charts/chart-download-button";
 import { DonutChart, type DonutSlice } from "@/components/charts/donut-chart";
 import { Dialog, DialogTrigger, Modal, ModalOverlay } from "@/components/application/modals/modal";
 import { cx } from "@/utils/cx";
@@ -10,6 +11,11 @@ export interface DonutSide {
     label: string;
     /** Centre total (e.g. "€ 656"). */
     centerValue: string;
+    /**
+     * The same total as a number, for the Excel export's Totaal row. The measured one — adding the
+     * slices up gives a different figure, since each is rounded on its way here.
+     */
+    totaal?: number | null;
     data: DonutSlice[];
 }
 
@@ -81,20 +87,39 @@ function Donuts({
 export function DonutComparisonCard({ title, categories, left, right, expandable = false, className }: DonutComparisonCardProps) {
     const [isExpanded, setIsExpanded] = useState(false);
 
+    // Two rings read as one table: a row per category, a column per side. The slices carry no key
+    // of their own — the shared name is what ties a slice on the left ring to its twin on the
+    // right, the same thing the legend is built on.
+    const waarde = (zijde: DonutSide, naam: string) => zijde.data.find((slice) => slice.name === naam)?.value ?? null;
+    const downloadButton = (
+        <ChartDownloadButton
+            title={title}
+            data={categories.map((categorie) => ({ name: categorie.name, links: waarde(left, categorie.name), rechts: waarde(right, categorie.name) }))}
+            series={[
+                { key: "links", name: left.label, color: "" },
+                { key: "rechts", name: right.label, color: "" },
+            ]}
+            totalRow={{ label: "Totaal", values: [left.totaal, right.totaal] }}
+        />
+    );
+
     return (
         <>
             <div className={cx("rounded-xl bg-primary shadow-xs ring-1 ring-secondary ring-inset", className)}>
                 <div className="flex items-center justify-between px-5 pt-5 pb-1">
                     <h3 className="text-md font-semibold text-primary">{title}</h3>
-                    {expandable && (
-                        <button
-                            type="button"
-                            onClick={() => setIsExpanded(true)}
-                            className="rounded-md p-1.5 text-fg-quaternary transition duration-100 ease-linear hover:bg-secondary_hover hover:text-fg-quaternary_hover"
-                        >
-                            <Expand06 className="size-5" aria-hidden="true" />
-                        </button>
-                    )}
+                    <div className="flex items-center gap-1">
+                        {downloadButton}
+                        {expandable && (
+                            <button
+                                type="button"
+                                onClick={() => setIsExpanded(true)}
+                                className="rounded-md p-1.5 text-fg-quaternary transition duration-100 ease-linear hover:bg-secondary_hover hover:text-fg-quaternary_hover"
+                            >
+                                <Expand06 className="size-5" aria-hidden="true" />
+                            </button>
+                        )}
+                    </div>
                 </div>
                 <div className="px-5 pt-3 pb-5">
                     <Donuts left={left} right={right} categories={categories} />
@@ -111,13 +136,16 @@ export function DonutComparisonCard({ title, categories, left, right, expandable
                                 <div className="w-full rounded-xl bg-primary p-6 shadow-lg">
                                     <div className="mb-4 flex items-center justify-between">
                                         <h3 className="text-lg font-semibold text-primary">{title}</h3>
-                                        <button
-                                            type="button"
-                                            onClick={() => setIsExpanded(false)}
-                                            className="rounded-md p-1.5 text-fg-quaternary transition duration-100 ease-linear hover:bg-secondary_hover hover:text-fg-quaternary_hover"
-                                        >
-                                            <XClose className="size-5" aria-hidden="true" />
-                                        </button>
+                                        <div className="flex items-center gap-1">
+                                            {downloadButton}
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsExpanded(false)}
+                                                className="rounded-md p-1.5 text-fg-quaternary transition duration-100 ease-linear hover:bg-secondary_hover hover:text-fg-quaternary_hover"
+                                            >
+                                                <XClose className="size-5" aria-hidden="true" />
+                                            </button>
+                                        </div>
                                     </div>
                                     <Donuts left={left} right={right} categories={categories} height={360} showSliceLabels />
                                 </div>

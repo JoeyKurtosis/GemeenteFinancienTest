@@ -21,6 +21,20 @@ class UserProfile(models.Model):
         return f"Profile: {self.user.username}"
 
 
+class TwoFactorCode(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="two_factor_codes",
+    )
+    code = models.CharField(max_length=32)
+    status = models.CharField(max_length=32, default="pending")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"2FA for {self.user.username}"
+
+
 class PasswordResetToken(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,

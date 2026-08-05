@@ -1,12 +1,12 @@
 import { ChartCard } from "@/components/charts/chart-card";
 import { ResultCard } from "@/components/charts/result-card";
 import { type SectionTab, SectionTabs } from "@/components/layout/section-tabs";
+import { useChartComments } from "@/features/comments";
 import type { BegrotingWeergave } from "../api";
 import { useBegroting } from "../hooks/use-begroting";
 import { begrotingPagina } from "./begroting-charts";
 
 const begrotingTabs: SectionTab[] = [
-    { label: "Begroting", href: "/begroting" },
     { label: "Begroting versus Jaarrekening (per inwoner)", href: "/begroting/begroting-vs-jaarrekening-per-inwoner" },
     { label: "Begroting versus Jaarrekening (absolute bedragen)", href: "/begroting/begroting-vs-jaarrekening-absolute-bedragen" },
 ];
@@ -33,14 +33,32 @@ export function BegrotingPageView({ weergave }: { weergave: BegrotingWeergave })
 
     const pagina = begrotingPagina(weergave, data);
 
+    const allChartIds = [`begroting:${pagina.uitgavenPerJaar.title}`, ...pagina.kaarten.map((k) => `begroting:${k.title}`)];
+    const { commentsMap, invalidate } = useChartComments(allChartIds);
+
     return (
         <section className="flex flex-col gap-6">
             <SectionTabs items={begrotingTabs} />
             <div className="grid gap-6 lg:grid-cols-2">
                 <ResultCard title="Resultaat" rows={pagina.resultaat} isLoading={isLoading} />
-                <ChartCard {...pagina.uitgavenPerJaar} isLoading={isLoading} expandable />
+                <ChartCard
+                    {...pagina.uitgavenPerJaar}
+                    isLoading={isLoading}
+                    expandable
+                    chartId={`begroting:${pagina.uitgavenPerJaar.title}`}
+                    comment={commentsMap.get(`begroting:${pagina.uitgavenPerJaar.title}`)}
+                    onCommentChange={invalidate}
+                />
                 {pagina.kaarten.map((kaart) => (
-                    <ChartCard key={kaart.title} {...kaart} isLoading={isLoading} expandable />
+                    <ChartCard
+                        key={kaart.title}
+                        {...kaart}
+                        isLoading={isLoading}
+                        expandable
+                        chartId={`begroting:${kaart.title}`}
+                        comment={commentsMap.get(`begroting:${kaart.title}`)}
+                        onCommentChange={invalidate}
+                    />
                 ))}
             </div>
         </section>

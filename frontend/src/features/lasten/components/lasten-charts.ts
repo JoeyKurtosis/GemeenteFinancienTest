@@ -74,7 +74,9 @@ export function donutSide(verdeling: Verdeling, zijde: VerdelingZijde) {
         color: color(index),
     }));
 
-    return { label: zijde.label, centerValue: euro(zijde.totaal), data };
+    // `totaal` alongside the formatted centre value: the Excel export needs the measured
+    // number, and adding the slices up is not the same figure — each is rounded on its way here.
+    return { label: zijde.label, centerValue: euro(zijde.totaal), totaal: zijde.totaal, data };
 }
 
 /** The kostensoort bar's stack, coloured off the same cycle as the donut. */

@@ -1,10 +1,14 @@
-import { useState } from "react";
-import { Expand06, XClose } from "@untitledui/icons";
+import { useEffect, useState } from "react";
+import { Expand06, MessageChatSquare, XClose } from "@untitledui/icons";
 import { Dialog, DialogTrigger, Modal, ModalOverlay } from "@/components/application/modals/modal";
 import type { ChartSeries, ChartType, ValueFormat } from "@/components/charts/chart-card";
 import { ChartContent } from "@/components/charts/chart-card";
+import { ChartDownloadButton } from "@/components/charts/chart-download-button";
 import { ChartSkeleton } from "@/components/charts/chart-skeleton";
 import { HighlightCard, type HighlightCardData } from "@/components/charts/highlight-card";
+import { useAuth } from "@/features/auth";
+import type { ChartComment } from "@/features/comments";
+import { ChartCommentButton, formatCommentDate, useChartAnchor } from "@/features/comments";
 import { cx } from "@/utils/cx";
 
 interface ChartCardWithDetailsProps {
@@ -25,6 +29,9 @@ interface ChartCardWithDetailsProps {
     /** Show a skeleton placeholder instead of the chart while data loads. */
     isLoading?: boolean;
     className?: string;
+    chartId?: string;
+    comment?: ChartComment;
+    onCommentChange?: () => void;
 }
 
 export function ChartCardWithDetails({
@@ -43,10 +50,25 @@ export function ChartCardWithDetails({
     expandable = false,
     isLoading = false,
     className,
+    chartId,
+    comment,
+    onCommentChange,
 }: ChartCardWithDetailsProps) {
     const [isExpanded, setIsExpanded] = useState(false);
+    const { isAuthenticated } = useAuth();
+    // Lets a note in het notities-overzicht link back to this exact card. Arriving on that link
+    // opens the chart at full size, where the note is printed under it.
+    const { ref: anchorRef, anchorId, shouldExpand } = useChartAnchor(chartId, isLoading);
+
+    useEffect(() => {
+        if (shouldExpand && expandable) setIsExpanded(true);
+    }, [shouldExpand, expandable]);
 
     const chartContentProps = { data, series, chartType, xAxisKey, xAxisLabel, yAxisLabel, showLegend, valueFormat };
+
+    const downloadButton = !isLoading ? (
+        <ChartDownloadButton title={title} data={data} series={series} xAxisKey={xAxisKey} xAxisLabel={xAxisLabel} valueFormat={valueFormat} />
+    ) : null;
 
     const expandButton =
         expandable && !isLoading ? (
@@ -61,10 +83,25 @@ export function ChartCardWithDetails({
 
     return (
         <>
-            <div className={cx("rounded-xl bg-primary shadow-xs ring-1 ring-secondary ring-inset", className)}>
+            <div
+                ref={anchorRef}
+                id={anchorId}
+                className={cx(
+                    "scroll-mt-24 rounded-xl bg-primary shadow-xs ring-1 ring-secondary ring-inset",
+                    // Arrived here from a link to this chart: say which one was meant.
+                    "target:ring-2 target:ring-brand",
+                    className,
+                )}
+            >
                 <div className="flex items-center justify-between px-5 pt-5 pb-1">
                     <h3 className="text-md font-semibold text-primary">{title}</h3>
-                    {expandButton}
+                    <div className="flex items-center gap-1">
+                        {isAuthenticated && chartId && onCommentChange && !isLoading && (
+                            <ChartCommentButton chartId={chartId} comment={comment} onSaved={onCommentChange} />
+                        )}
+                        {isAuthenticated && downloadButton}
+                        {expandButton}
+                    </div>
                 </div>
 
                 <div className="flex flex-col gap-6 px-5 pb-5 lg:flex-row">
@@ -112,13 +149,16 @@ export function ChartCardWithDetails({
                                 <div className="w-full rounded-xl bg-primary p-6 shadow-lg">
                                     <div className="mb-4 flex items-center justify-between">
                                         <h3 className="text-lg font-semibold text-primary">{title}</h3>
-                                        <button
-                                            type="button"
-                                            onClick={() => setIsExpanded(false)}
-                                            className="rounded-md p-1.5 text-fg-quaternary transition duration-100 ease-linear hover:bg-secondary_hover hover:text-fg-quaternary_hover"
-                                        >
-                                            <XClose className="size-5" aria-hidden="true" />
-                                        </button>
+                                        <div className="flex items-center gap-1">
+                                            {downloadButton}
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsExpanded(false)}
+                                                className="rounded-md p-1.5 text-fg-quaternary transition duration-100 ease-linear hover:bg-secondary_hover hover:text-fg-quaternary_hover"
+                                            >
+                                                <XClose className="size-5" aria-hidden="true" />
+                                            </button>
+                                        </div>
                                     </div>
 
                                     <div className="flex flex-col gap-6 lg:flex-row">
@@ -150,6 +190,15 @@ export function ChartCardWithDetails({
                                             <ChartContent {...chartContentProps} height={500} expanded />
                                         </div>
                                     </div>
+                                    {comment?.text && (
+                                        <div className="mt-4 flex gap-2 rounded-lg bg-secondary p-3">
+                                            <MessageChatSquare className="mt-0.5 size-4 shrink-0 text-brand-secondary" aria-hidden="true" />
+                                            <div className="flex flex-col gap-1">
+                                                <p className="text-sm whitespace-pre-wrap text-secondary">{comment.text}</p>
+                                                <p className="text-xs text-tertiary">Bijgewerkt op {formatCommentDate(comment.updated_at)}</p>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </Dialog>
                         </Modal>

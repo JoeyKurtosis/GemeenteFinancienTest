@@ -1,6 +1,7 @@
 import { ChartCard } from "@/components/charts/chart-card";
 import { DonutComparisonCard } from "@/components/charts/donut-comparison-card";
 import { InfoCard } from "@/components/charts/info-card";
+import { useChartComments } from "@/features/comments";
 import { useBenchmark } from "../hooks/use-benchmark";
 import { donutSide, personeelSeries, taakveldCategories, trendSeries, uitlegParagraphs } from "./benchmark-charts";
 
@@ -24,37 +25,23 @@ export function BenchmarkRouteView() {
     const landelijkLabel = data?.cohorten.find((cohort) => cohort.key === "landelijk")?.label;
     const categorie = (data?.categorie ?? []).filter((row) => row.name !== landelijkLabel);
 
+    const chartIds = ["benchmark:Trend", "benchmark:Referentiegroep", "benchmark:Personele lasten per inwoner per categorie"];
+    const { commentsMap, invalidate } = useChartComments(chartIds);
+
     return (
         <section className="grid gap-6 lg:grid-cols-2">
             <InfoCard title="Uitleg" paragraphs={uitlegParagraphs} />
 
-            <ChartCard title="Trend" data={data?.trend ?? []} series={trendSeries(data?.cohorten ?? [])} chartType="line" isLoading={isLoading} expandable />
-
-            {/* Without a referentiegroep there are no gemeenten to draw, so the card says so
-                rather than showing an empty chart. */}
-            {referentiegroep.length > 0 || isLoading ? (
-                <ChartCard
-                    title="Referentiegroep"
-                    data={referentiegroep}
-                    series={personeelSeries}
-                    chartType="horizontal-bar"
-                    isLoading={isLoading}
-                    // A referentiegroep can run to every gemeente in the country, so the bars
-                    // scroll inside the card rather than stretching it down the page.
-                    maxHeight={420}
-                    expandable
-                />
-            ) : (
-                <InfoCard title="Referentiegroep" paragraphs={["Kies gemeenten in de referentiegroep om hun personele lasten naast elkaar te zien."]} />
-            )}
-
             <ChartCard
-                title="Personele lasten per inwoner per categorie"
-                data={categorie}
-                series={personeelSeries}
-                chartType="horizontal-bar"
+                title="Trend"
+                data={data?.trend ?? []}
+                series={trendSeries(data?.cohorten ?? [])}
+                chartType="line"
                 isLoading={isLoading}
                 expandable
+                chartId="benchmark:Trend"
+                comment={commentsMap.get("benchmark:Trend")}
+                onCommentChange={invalidate}
             />
 
             {taakvelden && (
@@ -67,6 +54,37 @@ export function BenchmarkRouteView() {
                     className="col-span-2"
                 />
             )}
+
+            {/* Without a referentiegroep there are no gemeenten to draw, so the card says so
+                rather than showing an empty chart. */}
+            {referentiegroep.length > 0 || isLoading ? (
+                <ChartCard
+                    title="Referentiegroep"
+                    data={referentiegroep}
+                    series={personeelSeries}
+                    chartType="horizontal-bar"
+                    isLoading={isLoading}
+                    maxHeight={420}
+                    expandable
+                    chartId="benchmark:Referentiegroep"
+                    comment={commentsMap.get("benchmark:Referentiegroep")}
+                    onCommentChange={invalidate}
+                />
+            ) : (
+                <InfoCard title="Referentiegroep" paragraphs={["Kies gemeenten in de referentiegroep om hun personele lasten naast elkaar te zien."]} />
+            )}
+
+            <ChartCard
+                title="Personele lasten per inwoner per categorie"
+                data={categorie}
+                series={personeelSeries}
+                chartType="horizontal-bar"
+                isLoading={isLoading}
+                expandable
+                chartId="benchmark:Personele lasten per inwoner per categorie"
+                comment={commentsMap.get("benchmark:Personele lasten per inwoner per categorie")}
+                onCommentChange={invalidate}
+            />
         </section>
     );
 }

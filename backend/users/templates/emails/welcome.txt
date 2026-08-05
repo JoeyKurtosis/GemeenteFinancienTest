@@ -1,0 +1,9 @@
+Beste {{ name }},
+
+Bedankt voor het aanmaken van je account bij Gemeentefinanciën.
+Je hebt nu toegang tot het dashboard.
+
+Log in via: {{ login_url }}
+
+Met vriendelijke groet,
+Het Gemeentefinanciën team

@@ -1,13 +1,14 @@
 import { ChartCard } from "@/components/charts/chart-card";
-import { useGemeentelijkeStand } from "../hooks/use-gemeentelijke-stand";
-import { cohortSeries, indexSeries, spuksSeries, verdelingSeries } from "./gemeentelijkestand-charts";
+import { useChartComments } from "@/features/comments";
+import { useTrends } from "../hooks/use-trends";
+import { cohortSeries, indexSeries, spuksSeries, verdelingSeries } from "./trends-charts";
 
 function SectionHeading({ children }: { children: string }) {
     return <h2 className="pb-2 text-display-xs font-semibold text-primary">{children}</h2>;
 }
 
-export function GemeentelijkeStandRouteView() {
-    const { data, isLoading, error } = useGemeentelijkeStand();
+export function TrendsRouteView() {
+    const { data, isLoading, error } = useTrends();
 
     if (error) {
         return (
@@ -26,6 +27,30 @@ export function GemeentelijkeStandRouteView() {
     const hoofdcategorie = data?.verdeling.hoofdcategorie;
     const hoofdtaakveld = data?.verdeling.hoofdtaakveld;
 
+    const chartTitles = [
+        "Gemiddelde uitgaven per inwoner per jaar",
+        "Gemiddelde uitgaven binnen het sociaal domein per inwoner per jaar",
+        "Gemiddelde totale personeelskosten per inwoner per jaar",
+        "Gemiddelde kosten voor inhuur per inwoner per jaar",
+        "Gemiddelde uitgaven voor verbonden partijen per inwoner per jaar",
+        "Index totale uitgaven vergeleken met prijsinflatie",
+        "Index personeelskosten vergeleken met inkomensinflatie (CAO-lonen)",
+        "Gemiddelde verdeling uitgaven per hoofdtaakveld",
+        "Gemiddelde verdeling uitgaven per categorie",
+        "Gemiddelde bedrag SPUKS per inwoner",
+        "Inkomsten vanuit het rijk per inwoner per jaar",
+        "Inkomsten vanuit lokale heffingen per inwoner per jaar",
+        "Inkomsten vanuit het rijk SPUKS per inwoner per jaar",
+        "Gemiddeld overschot of tekort (zonder reservemutaties)",
+    ];
+    const chartIds = chartTitles.map((t) => `trends:${t}`);
+    const { commentsMap, invalidate } = useChartComments(chartIds);
+    const commentProps = (title: string) => ({
+        chartId: `trends:${title}`,
+        comment: commentsMap.get(`trends:${title}`),
+        onCommentChange: invalidate,
+    });
+
     return (
         <section className="space-y-10">
             {/* ── Lasten ── */}
@@ -39,6 +64,7 @@ export function GemeentelijkeStandRouteView() {
                         chartType="line"
                         isLoading={isLoading}
                         expandable
+                        {...commentProps("Gemiddelde uitgaven per inwoner per jaar")}
                     />
                     <ChartCard
                         title="Gemiddelde uitgaven binnen het sociaal domein per inwoner per jaar"
@@ -47,6 +73,7 @@ export function GemeentelijkeStandRouteView() {
                         chartType="line"
                         isLoading={isLoading}
                         expandable
+                        {...commentProps("Gemiddelde uitgaven binnen het sociaal domein per inwoner per jaar")}
                     />
                     <ChartCard
                         title="Gemiddelde totale personeelskosten per inwoner per jaar"
@@ -55,6 +82,7 @@ export function GemeentelijkeStandRouteView() {
                         chartType="line"
                         isLoading={isLoading}
                         expandable
+                        {...commentProps("Gemiddelde totale personeelskosten per inwoner per jaar")}
                     />
                     <ChartCard
                         title="Gemiddelde kosten voor inhuur per inwoner per jaar"
@@ -63,6 +91,7 @@ export function GemeentelijkeStandRouteView() {
                         chartType="line"
                         isLoading={isLoading}
                         expandable
+                        {...commentProps("Gemiddelde kosten voor inhuur per inwoner per jaar")}
                     />
                     <ChartCard
                         title="Gemiddelde uitgaven voor verbonden partijen per inwoner per jaar"
@@ -71,6 +100,7 @@ export function GemeentelijkeStandRouteView() {
                         chartType="line"
                         isLoading={isLoading}
                         expandable
+                        {...commentProps("Gemiddelde uitgaven voor verbonden partijen per inwoner per jaar")}
                     />
                 </div>
             </div>
@@ -87,6 +117,7 @@ export function GemeentelijkeStandRouteView() {
                         valueFormat="index"
                         isLoading={isLoading}
                         expandable
+                        {...commentProps("Index totale uitgaven vergeleken met prijsinflatie")}
                     />
                     <ChartCard
                         title="Index personeelskosten vergeleken met inkomensinflatie (CAO-lonen)"
@@ -96,6 +127,7 @@ export function GemeentelijkeStandRouteView() {
                         valueFormat="index"
                         isLoading={isLoading}
                         expandable
+                        {...commentProps("Index personeelskosten vergeleken met inkomensinflatie (CAO-lonen)")}
                     />
                 </div>
             </div>
@@ -122,6 +154,7 @@ export function GemeentelijkeStandRouteView() {
                         normalize
                         isLoading={isLoading}
                         expandable
+                        {...commentProps("Gemiddelde verdeling uitgaven per hoofdtaakveld")}
                     />
                     <ChartCard
                         title="Gemiddelde verdeling uitgaven per categorie"
@@ -132,6 +165,7 @@ export function GemeentelijkeStandRouteView() {
                         normalize
                         isLoading={isLoading}
                         expandable
+                        {...commentProps("Gemiddelde verdeling uitgaven per categorie")}
                     />
                 </div>
             </div>
@@ -148,6 +182,7 @@ export function GemeentelijkeStandRouteView() {
                         showLegend={false}
                         isLoading={isLoading}
                         expandable
+                        {...commentProps("Gemiddelde bedrag SPUKS per inwoner")}
                     />
                 </div>
             </div>
@@ -163,6 +198,7 @@ export function GemeentelijkeStandRouteView() {
                         chartType="line"
                         isLoading={isLoading}
                         expandable
+                        {...commentProps("Inkomsten vanuit het rijk per inwoner per jaar")}
                     />
                     <ChartCard
                         title="Inkomsten vanuit lokale heffingen per inwoner per jaar"
@@ -171,6 +207,7 @@ export function GemeentelijkeStandRouteView() {
                         chartType="line"
                         isLoading={isLoading}
                         expandable
+                        {...commentProps("Inkomsten vanuit lokale heffingen per inwoner per jaar")}
                     />
                     <ChartCard
                         title="Inkomsten vanuit het rijk SPUKS per inwoner per jaar"
@@ -179,6 +216,7 @@ export function GemeentelijkeStandRouteView() {
                         chartType="line"
                         isLoading={isLoading}
                         expandable
+                        {...commentProps("Inkomsten vanuit het rijk SPUKS per inwoner per jaar")}
                     />
                 </div>
             </div>
@@ -195,6 +233,7 @@ export function GemeentelijkeStandRouteView() {
                         valueFormat="percent"
                         isLoading={isLoading}
                         expandable
+                        {...commentProps("Gemiddeld overschot of tekort (zonder reservemutaties)")}
                     />
                 </div>
             </div>

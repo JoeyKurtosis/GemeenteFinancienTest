@@ -1,10 +1,10 @@
 import { useLocation } from "@tanstack/react-router";
 
 /** Route prefixes where the "Reservemutaties" toggle is relevant (matches sub-routes too). */
-const reservemutatiesRoutes = ["/begroting", "/baten", "/lasten", "/gemeentelijkestand", "/managementoverzicht"];
+const reservemutatiesRoutes = ["/begroting", "/baten", "/lasten", "/trends", "/managementoverzicht"];
 
 /** Route prefixes where the "Verslagsoort" filter is relevant (matches sub-routes too). */
-const verslagsoortRoutes = ["/gemeentelijkestand", "/benchmark", "/baten", "/managementoverzicht"];
+const verslagsoortRoutes = ["/trends", "/benchmark", "/baten", "/managementoverzicht"];
 
 /**
  * Routes where "Verslagsoort" applies to the index page and *not* to its sub-routes.
@@ -28,16 +28,7 @@ const verslagsoortIndexRoutes = ["/begroting"];
  * The utility pages are left out (/account, /instellingen, /support): nothing there is a figure,
  * so a filter panel beside them is noise.
  */
-const gefilterdeRoutes = [
-    "/referentiegroep",
-    "/managementoverzicht",
-    "/verantwoording",
-    "/begroting",
-    "/lasten",
-    "/benchmark",
-    "/baten",
-    "/gemeentelijkestand",
-];
+const gefilterdeRoutes = ["/referentiegroep", "/managementoverzicht", "/verantwoording", "/begroting", "/lasten", "/benchmark", "/baten", "/trends"];
 
 const opRoute = (pathname: string, route: string) => pathname === route || pathname.startsWith(`${route}/`);
 
@@ -71,13 +62,13 @@ export function useFilterRelevance(): FilterRelevance {
     // The one route whose filters read differently: it has no single gemeente to compare against
     // a group, so the ComboBox is left off and the multi-select becomes the report's "Gemeente"
     // slicer — the set of municipalities every average is taken over.
-    const isGemeentelijkeStand = opRoute(pathname, "/gemeentelijkestand");
+    const isTrends = opRoute(pathname, "/trends");
 
     return {
-        gemeente: !isGemeentelijkeStand,
+        gemeente: !isTrends,
         referentie: true,
-        referentieLabel: isGemeentelijkeStand ? "Gemeente" : "Referentiegroep",
-        inwoner: isGemeentelijkeStand,
+        referentieLabel: isTrends ? "Gemeente" : "Referentiegroep",
+        inwoner: isTrends,
         verslagsoort:
             verslagsoortRoutes.some((route) => opRoute(pathname, route)) ||
             verslagsoortIndexRoutes.some((route) => pathname === route || pathname === `${route}/`),

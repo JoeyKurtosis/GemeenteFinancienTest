@@ -22,7 +22,11 @@ export function LoginRouteView() {
         const data = Object.fromEntries(new FormData(e.currentTarget));
 
         try {
-            await login(data.email as string, data.password as string);
+            const response = await login(data.email as string, data.password as string);
+            if ("requires_2fa" in response && response.requires_2fa) {
+                navigate({ to: "/2fa" });
+                return;
+            }
             navigate({ to: "/" });
         } catch (err) {
             setError(err instanceof Error ? err.message : "Inloggen mislukt");

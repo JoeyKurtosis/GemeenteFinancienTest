@@ -3,6 +3,7 @@ import { Tabs } from "@/components/application/tabs/tabs";
 import { useAuth } from "@/features/auth";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { AccountHeader } from "./account-header";
+import { NotesSection } from "./notes-section";
 import { PasswordSection } from "./password-section";
 import { ProfileSection } from "./profile-section";
 
@@ -22,7 +23,7 @@ export function AccountRouteView() {
             <Tabs className="mt-8" defaultSelectedKey="account">
                 <Tabs.List type="underline">
                     <Tabs.Item id="account">Account</Tabs.Item>
-                    <Tabs.Item id="facturering">Facturering</Tabs.Item>
+                    <Tabs.Item id="notities">Notities</Tabs.Item>
                 </Tabs.List>
 
                 <Tabs.Panel id="account" className="pt-8">
@@ -32,11 +33,8 @@ export function AccountRouteView() {
                     </div>
                 </Tabs.Panel>
 
-                <Tabs.Panel id="facturering" className="pt-8">
-                    <div className="flex flex-col items-center gap-2 rounded-2xl border border-secondary py-16 text-center">
-                        <h2 className="text-lg font-semibold text-primary">Binnenkort beschikbaar</h2>
-                        <p className="max-w-sm text-sm text-tertiary">Hier beheer je binnenkort je betaalgegevens voor de AI-chatbot.</p>
-                    </div>
+                <Tabs.Panel id="notities" className="pt-8">
+                    <NotesSection />
                 </Tabs.Panel>
             </Tabs>
         </div>
