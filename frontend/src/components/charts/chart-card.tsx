@@ -5,6 +5,7 @@ import { ChartCommentButton } from "@/features/comments";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, LabelList, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartLegendContent, ChartTooltipContent } from "@/components/application/charts/charts-base";
 import { Dialog, DialogTrigger, Modal, ModalOverlay } from "@/components/application/modals/modal";
+import { ChartDownloadButton } from "@/components/charts/chart-download-button";
 import { ChartSkeleton } from "@/components/charts/chart-skeleton";
 import { cx } from "@/utils/cx";
 
@@ -127,6 +128,21 @@ export function ChartCard({
 
     const chartContentProps = { data, series, chartType, xAxisKey, xAxisLabel, yAxisLabel, showLegend, valueFormat, normalize, totals };
 
+    // The same figures the chart is drawn from, as a spreadsheet. `normalize` goes along because
+    // it decides whether these values read as amounts or as shares — see buildChartSheet.
+    const downloadButton = !isLoading ? (
+        <ChartDownloadButton
+            title={title}
+            data={data}
+            series={series}
+            xAxisKey={xAxisKey}
+            xAxisLabel={xAxisLabel}
+            valueFormat={valueFormat}
+            normalize={normalize}
+            totals={totals}
+        />
+    ) : null;
+
     return (
         <>
             <div className={cx("rounded-xl bg-primary shadow-xs ring-1 ring-secondary ring-inset", className)}>
@@ -136,6 +152,7 @@ export function ChartCard({
                         {chartId && onCommentChange && !isLoading && (
                             <ChartCommentButton chartId={chartId} comment={comment} onSaved={onCommentChange} />
                         )}
+                        {downloadButton}
                         {expandable && !isLoading && (
                             <button
                                 type="button"
@@ -158,13 +175,16 @@ export function ChartCard({
                                 <div className="w-full rounded-xl bg-primary p-6 shadow-lg">
                                     <div className="mb-4 flex items-center justify-between">
                                         <h3 className="text-lg font-semibold text-primary">{title}</h3>
-                                        <button
-                                            type="button"
-                                            onClick={() => setIsExpanded(false)}
-                                            className="rounded-md p-1.5 text-fg-quaternary transition duration-100 ease-linear hover:bg-secondary_hover hover:text-fg-quaternary_hover"
-                                        >
-                                            <XClose className="size-5" aria-hidden="true" />
-                                        </button>
+                                        <div className="flex items-center gap-1">
+                                            {downloadButton}
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsExpanded(false)}
+                                                className="rounded-md p-1.5 text-fg-quaternary transition duration-100 ease-linear hover:bg-secondary_hover hover:text-fg-quaternary_hover"
+                                            >
+                                                <XClose className="size-5" aria-hidden="true" />
+                                            </button>
+                                        </div>
                                     </div>
                                     {/* Expanding is what you do to see the long list, so the
                                         cap is roomier here — it still scrolls, in a taller box. */}

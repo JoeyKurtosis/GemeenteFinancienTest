@@ -3,6 +3,7 @@ import { Expand06, MessageChatSquare, XClose } from "@untitledui/icons";
 import { Dialog, DialogTrigger, Modal, ModalOverlay } from "@/components/application/modals/modal";
 import type { ChartSeries, ChartType, ValueFormat } from "@/components/charts/chart-card";
 import { ChartContent } from "@/components/charts/chart-card";
+import { ChartDownloadButton } from "@/components/charts/chart-download-button";
 import { ChartSkeleton } from "@/components/charts/chart-skeleton";
 import { HighlightCard, type HighlightCardData } from "@/components/charts/highlight-card";
 import type { ChartComment } from "@/features/comments";
@@ -56,6 +57,10 @@ export function ChartCardWithDetails({
 
     const chartContentProps = { data, series, chartType, xAxisKey, xAxisLabel, yAxisLabel, showLegend, valueFormat };
 
+    const downloadButton = !isLoading ? (
+        <ChartDownloadButton title={title} data={data} series={series} xAxisKey={xAxisKey} xAxisLabel={xAxisLabel} valueFormat={valueFormat} />
+    ) : null;
+
     const expandButton =
         expandable && !isLoading ? (
             <button
@@ -76,6 +81,7 @@ export function ChartCardWithDetails({
                         {chartId && onCommentChange && !isLoading && (
                             <ChartCommentButton chartId={chartId} comment={comment} onSaved={onCommentChange} />
                         )}
+                        {downloadButton}
                         {expandButton}
                     </div>
                 </div>
@@ -125,13 +131,16 @@ export function ChartCardWithDetails({
                                 <div className="w-full rounded-xl bg-primary p-6 shadow-lg">
                                     <div className="mb-4 flex items-center justify-between">
                                         <h3 className="text-lg font-semibold text-primary">{title}</h3>
-                                        <button
-                                            type="button"
-                                            onClick={() => setIsExpanded(false)}
-                                            className="rounded-md p-1.5 text-fg-quaternary transition duration-100 ease-linear hover:bg-secondary_hover hover:text-fg-quaternary_hover"
-                                        >
-                                            <XClose className="size-5" aria-hidden="true" />
-                                        </button>
+                                        <div className="flex items-center gap-1">
+                                            {downloadButton}
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsExpanded(false)}
+                                                className="rounded-md p-1.5 text-fg-quaternary transition duration-100 ease-linear hover:bg-secondary_hover hover:text-fg-quaternary_hover"
+                                            >
+                                                <XClose className="size-5" aria-hidden="true" />
+                                            </button>
+                                        </div>
                                     </div>
 
                                     <div className="flex flex-col gap-6 lg:flex-row">
