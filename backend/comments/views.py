@@ -7,17 +7,28 @@ from .serializers import ChartCommentSerializer
 
 
 class ChartCommentBatchView(APIView):
-    """Batch-fetch the authenticated user's comments for multiple charts."""
+    """
+    Fetch the authenticated user's comments.
+
+    A page asks for the charts it draws (`?charts=a,b,c`); the account overview asks for
+    everything by leaving the parameter off. An empty `?charts=` is a page with no charts to
+    ask about, which is not the same question — that still answers with nothing.
+    """
 
     def get(self, request):
-        raw = request.query_params.get("charts", "")
-        chart_ids = [cid.strip() for cid in raw.split(",") if cid.strip()]
-        if not chart_ids:
-            return Response([])
+        raw = request.query_params.get("charts")
 
-        comments = ChartComment.objects.filter(
-            user=request.user, chart_id__in=chart_ids
-        )
+        if raw is None:
+            # Meta.ordering puts the most recently edited note first.
+            comments = ChartComment.objects.filter(user=request.user)
+        else:
+            chart_ids = [cid.strip() for cid in raw.split(",") if cid.strip()]
+            if not chart_ids:
+                return Response([])
+            comments = ChartComment.objects.filter(
+                user=request.user, chart_id__in=chart_ids
+            )
+
         serializer = ChartCommentSerializer(comments, many=True)
         return Response(serializer.data)
 

@@ -14,6 +14,18 @@ export async function fetchComments(chartIds: string[]): Promise<ChartComment[]>
     return response.json();
 }
 
+/**
+ * Every comment the user has written, most recently edited first.
+ *
+ * Unlike `fetchComments` this one throws: a chart card can do without its comment, but the
+ * overview that is nothing but comments has to be able to say that it failed.
+ */
+export async function fetchAllComments(): Promise<ChartComment[]> {
+    const response = await fetch("/api/comments/", { credentials: "include" });
+    if (!response.ok) throw new Error("Notities ophalen mislukt");
+    return response.json();
+}
+
 export async function saveComment(chartId: string, text: string): Promise<ChartComment> {
     const response = await fetch(`/api/comments/${encodeURIComponent(chartId)}/`, {
         method: "PUT",

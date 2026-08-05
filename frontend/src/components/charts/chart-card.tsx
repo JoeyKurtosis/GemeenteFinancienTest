@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Expand06, MessageChatSquare, XClose } from "@untitledui/icons";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, LabelList, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartLegendContent, ChartTooltipContent } from "@/components/application/charts/charts-base";
@@ -7,7 +7,7 @@ import { ChartDownloadButton } from "@/components/charts/chart-download-button";
 import { ChartSkeleton } from "@/components/charts/chart-skeleton";
 import { useAuth } from "@/features/auth";
 import type { ChartComment } from "@/features/comments";
-import { ChartCommentButton } from "@/features/comments";
+import { ChartCommentButton, formatCommentDate, useChartAnchor } from "@/features/comments";
 import { cx } from "@/utils/cx";
 
 useAuth;
@@ -129,6 +129,13 @@ export function ChartCard({
 }: ChartCardProps) {
     const [isExpanded, setIsExpanded] = useState(false);
     const { isAuthenticated } = useAuth();
+    // Lets a note in het notities-overzicht link back to this exact card. Arriving on that link
+    // opens the chart at full size, where the note is printed under it.
+    const { ref: anchorRef, anchorId, shouldExpand } = useChartAnchor(chartId, isLoading);
+
+    useEffect(() => {
+        if (shouldExpand && expandable) setIsExpanded(true);
+    }, [shouldExpand, expandable]);
 
     const chartContentProps = { data, series, chartType, xAxisKey, xAxisLabel, yAxisLabel, showLegend, valueFormat, normalize, totals };
 
@@ -149,7 +156,16 @@ export function ChartCard({
 
     return (
         <>
-            <div className={cx("rounded-xl bg-primary shadow-xs ring-1 ring-secondary ring-inset", className)}>
+            <div
+                ref={anchorRef}
+                id={anchorId}
+                className={cx(
+                    "scroll-mt-24 rounded-xl bg-primary shadow-xs ring-1 ring-secondary ring-inset",
+                    // Arrived here from a link to this chart: say which one was meant.
+                    "target:ring-2 target:ring-brand",
+                    className,
+                )}
+            >
                 <div className="flex items-center justify-between px-5 pt-5 pb-1">
                     <h3 className="text-md font-semibold text-primary">{title}</h3>
                     <div className="flex items-center gap-1">
@@ -196,7 +212,10 @@ export function ChartCard({
                                     {comment?.text && (
                                         <div className="mt-4 flex gap-2 rounded-lg bg-secondary p-3">
                                             <MessageChatSquare className="mt-0.5 size-4 shrink-0 text-brand-secondary" aria-hidden="true" />
-                                            <p className="text-sm whitespace-pre-wrap text-secondary">{comment.text}</p>
+                                            <div className="flex flex-col gap-1">
+                                                <p className="text-sm whitespace-pre-wrap text-secondary">{comment.text}</p>
+                                                <p className="text-xs text-tertiary">Bijgewerkt op {formatCommentDate(comment.updated_at)}</p>
+                                            </div>
                                         </div>
                                     )}
                                 </div>
