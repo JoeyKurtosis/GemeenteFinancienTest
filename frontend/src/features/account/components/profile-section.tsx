@@ -50,11 +50,11 @@ export function ProfileSection() {
             <hr className="border-secondary" />
 
             <div className="grid gap-5 sm:grid-cols-2">
-                <Input isRequired label="Voornaam" name="first_name" value={firstName} onChange={setFirstName} placeholder="Voornaam" />
-                <Input isRequired label="Achternaam" name="last_name" value={lastName} onChange={setLastName} placeholder="Achternaam" />
+                <Input isRequired label="Voornaam" name="first_name" value={firstName} onChange={setFirstName} placeholder="Voornaam" autoComplete="given-name" />
+                <Input isRequired label="Achternaam" name="last_name" value={lastName} onChange={setLastName} placeholder="Achternaam" autoComplete="family-name" />
             </div>
 
-            <Input isRequired type="email" icon={Mail01} label="E-mailadres" name="email" value={email} onChange={setEmail} placeholder="naam@voorbeeld.nl" />
+            <Input isRequired type="email" icon={Mail01} label="E-mailadres" name="email" value={email} onChange={setEmail} placeholder="naam@voorbeeld.nl" autoComplete="email" />
 
             <hr className="border-secondary" />
 

@@ -77,7 +77,12 @@ export const ChartLegendContent = ({ reversed, payload, align, layout, className
                 const key = String(entry.dataKey ?? entry.value ?? index);
                 const row = (
                     <>
-                        <span className="block size-2 shrink-0 rounded-full ring-[0.5px] ring-black/10 ring-inset" style={{ backgroundColor: entry.color }} />
+                        {/* mt-1.5 is (20px line-height − 8px dot) / 2: on a row of one line it
+                            reads as centred, and on a wrapped one it stays with the first line. */}
+                        <span
+                            className="mt-1.5 block size-2 shrink-0 rounded-full ring-[0.5px] ring-black/10 ring-inset"
+                            style={{ backgroundColor: entry.color }}
+                        />
                         {entry.value}
                     </>
                 );
@@ -87,7 +92,7 @@ export const ChartLegendContent = ({ reversed, payload, align, layout, className
                         key={index}
                         className={cx(
                             "text-sm text-tertiary transition-opacity duration-100 ease-linear",
-                            activeKey != null && activeKey !== key && "opacity-40",
+                            activeKey === key && "font-semibold text-secondary",
                         )}
                     >
                         {onItemClick ? (
@@ -95,12 +100,14 @@ export const ChartLegendContent = ({ reversed, payload, align, layout, className
                                 type="button"
                                 onClick={() => onItemClick(key)}
                                 aria-pressed={activeKey === key}
-                                className="flex cursor-pointer items-center gap-2 rounded-sm transition duration-100 ease-linear hover:text-tertiary_hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
+                                // text-left because a button is centred by the browser's own
+                                // stylesheet — invisible until a legend is narrow enough to wrap.
+                                className="flex min-h-6 cursor-pointer items-start gap-2 rounded-sm px-1 text-left transition duration-100 ease-linear hover:text-tertiary_hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
                             >
                                 {row}
                             </button>
                         ) : (
-                            <span className="flex items-center gap-2">{row}</span>
+                            <span className="flex items-start gap-2">{row}</span>
                         )}
                     </li>
                 );

@@ -8,10 +8,8 @@ import { HintText } from "@/components/base/input/hint-text";
 import { Input, InputBase, TextField } from "@/components/base/input/input";
 import { cx } from "@/utils/cx";
 import { signup } from "../api";
-import { useAuth } from "../context/auth-context";
 
 export function SignupRouteView() {
-    const { setUser } = useAuth();
     const navigate = useNavigate();
     const [password, setPassword] = useState("");
     const [error, setError] = useState<string | null>(null);
@@ -25,9 +23,10 @@ export function SignupRouteView() {
         const data = Object.fromEntries(new FormData(e.currentTarget));
 
         try {
-            const user = await signup(data.name as string, data.email as string, data.password as string);
-            setUser(user);
-            navigate({ to: "/" });
+            // No session yet: the account exists but the address still has to be confirmed with
+            // the code that was just mailed. /2fa finishes the job and logs them in.
+            await signup(data.name as string, data.email as string, data.password as string);
+            navigate({ to: "/2fa", search: { intent: "signup" } });
         } catch (err) {
             setError(err instanceof Error ? err.message : "Registratie mislukt");
         } finally {
@@ -36,11 +35,11 @@ export function SignupRouteView() {
     }
 
     return (
-        <section className="min-h-screen bg-primary px-4 py-12 sm:bg-secondary md:px-8 md:pt-24">
+        <main id="main-content" tabIndex={-1} className="min-h-screen bg-primary px-4 py-12 outline-none sm:bg-secondary md:px-8 md:pt-24">
             <div className="flex w-full flex-col gap-6 bg-primary sm:mx-auto sm:max-w-110 sm:rounded-2xl sm:px-10 sm:py-8 sm:shadow-sm">
                 <div className="flex flex-col items-center gap-6 text-center">
-                    <Link to="/">
-                        <Logo className="h-[50px] text-[#133556] dark:text-white" />
+                    <Link to="/" aria-label="Gemeentefinanciën, naar de startpagina">
+                        <Logo aria-hidden="true" className="h-[50px] text-[#133556] dark:text-white" />
                     </Link>
                     <div className="flex flex-col gap-2 md:gap-3">
                         <h1 className="text-xl font-semibold text-primary md:text-display-xs">Account aanmaken</h1>
@@ -50,10 +49,10 @@ export function SignupRouteView() {
 
                 <Form onSubmit={handleSubmit} className="flex flex-col gap-6">
                     <div className="flex flex-col gap-5">
-                        <Input isRequired name="name" label="Naam" placeholder="Vul je naam in" size="lg" />
-                        <Input isRequired type="email" name="email" label="E-mailadres" placeholder="naam@voorbeeld.nl" size="lg" />
-                        <TextField aria-label="Wachtwoord" isRequired size="lg" name="password" value={password} onChange={setPassword} minLength={8}>
-                            <InputBase type="password" placeholder="Maak een wachtwoord" />
+                        <Input isRequired name="name" label="Naam" placeholder="Vul je naam in" size="lg" autoComplete="name" aria-describedby={error ? "signup-error" : undefined} />
+                        <Input isRequired type="email" name="email" label="E-mailadres" placeholder="naam@voorbeeld.nl" size="lg" autoComplete="email" aria-describedby={error ? "signup-error" : undefined} />
+                        <TextField aria-label="Wachtwoord" isRequired size="lg" name="password" value={password} onChange={setPassword} minLength={8} aria-describedby={error ? "signup-error" : undefined}>
+                            <InputBase type="password" placeholder="Maak een wachtwoord" autoComplete="new-password" />
                             <HintText className="flex items-center gap-1">
                                 <CheckCircle
                                     className={cx(
@@ -66,7 +65,7 @@ export function SignupRouteView() {
                         </TextField>
                     </div>
 
-                    {error && <p className="text-sm text-error-primary">{error}</p>}
+                    {error && <p id="signup-error" role="alert" className="text-sm text-error-primary">{error}</p>}
 
                     <Button type="submit" size="lg" isLoading={isSubmitting} showTextWhileLoading>
                         Account aanmaken
@@ -80,6 +79,6 @@ export function SignupRouteView() {
                     </Button>
                 </div>
             </div>
-        </section>
+        </main>
     );
 }

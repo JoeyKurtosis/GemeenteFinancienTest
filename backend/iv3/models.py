@@ -28,6 +28,8 @@ class Gemeente(models.Model):
     jaar = models.IntegerField()
 
     class Meta:
+        verbose_name = "Gemeente"
+        verbose_name_plural = "Gemeenten"
         constraints = [
             models.UniqueConstraint(fields=["jaar", "gm_code"], name="unique_gemeente_row")
         ]
@@ -52,6 +54,9 @@ class Inwoners(models.Model):
     aantal_inwoners = models.IntegerField(null=True)
 
     class Meta:
+        # The class name is already plural, so Django's default would read "Inwonerss".
+        verbose_name = "Inwoners"
+        verbose_name_plural = "Inwoners"
         constraints = [
             models.UniqueConstraint(fields=["jaar", "gemeente"], name="unique_inwoners_row")
         ]
@@ -240,23 +245,14 @@ class Iv3Summary(models.Model):
     # Zero for most gemeenten — 212 of 341 booked anything here in the 2023 Begroting.
     resultaat_lasten_per_hoofdcategorie = models.JSONField(default=dict)
 
-    # The lasten on the taakvelden the source never names — definitions.TAAKVELD_LABELS_ZONDER_BRON,
-    # the jeugdhulp codes 6.73 through 6.79 — split by hoofdcategorie ("1".."7"). All of
-    # hoofdtaakveld 6, and already counted in per_hoofdtaakveld["6"] and in lasten_per_taakveld;
-    # this is the same money singled out.
-    #
-    # The Begroting page draws the total as its own "(Leeg)" segment, as the report does, which
-    # means subtracting it from the sociaal domein. Per hoofdcategorie rather than as one figure
-    # because the Lasten detail page needs to take it back out of its kostensoort bar as well, and
-    # that bar splits hoofdcategorie 3 from the rest — a single total cannot say how much of it
-    # was goederen en diensten.
-    #
-    # Could be read out of lasten_per_taakveld instead, were that column carrying a categorie
-    # split, which it is not; and the pages that need this read neither of the two big lasten
-    # breakdowns anyway. Seven small keys against ~800 bytes of JSON on every row.
+    # Legacy subtotal for jeugdhulp/PGB rollups with authored parent labels, retained for
+    # storage/sync compatibility. These amounts are already included in hoofdtaakveld 6
+    # and the regular breakdowns; charts must not subtract or count them a second time.
     naamloze_lasten_per_hoofdcategorie = models.JSONField(default=dict)
 
     class Meta:
+        verbose_name = "IV3-samenvatting"
+        verbose_name_plural = "IV3-samenvattingen"
         constraints = [
             models.UniqueConstraint(
                 fields=["jaar", "verslagsoort", "gm_code"], name="unique_iv3_summary_row"
@@ -271,19 +267,17 @@ class Iv3Summary(models.Model):
 class Iv3Taakveld(models.Model):
     """What a taakveld code was called in a given year, for the Lasten detail donuts.
 
-    The names come out of the warehouse's own `taakveldbalanspost`, which carries them next
-    to the code ("0.1 Bestuur") and which sync_iv3_summary otherwise throws away when it
-    cuts the code off. Lifting them here rather than typing ~59 of them into definitions.py
-    keeps them authoritative; the handful the warehouse truncates or never names are
-    completed by definitions.TAAKVELD_LABEL_OVERRIDES.
+    The warehouse's `taakveldbalanspost` carries each code beside its name ("0.1 Bestuur").
+    Historical truncated names and grouped parents use TAAKVELD_LABEL_OVERRIDES; the
+    official 2025-2026 names use TAAKVELD_NAMEN_VANAF_2025.
 
     Per year, because a code is not a stable name: 6.4 was Begeleide participatie through 2024
     and is WSW en beschut werk from 2025, and 8.1 went from Ruimtelijke ordening to Ruimte en
     leefomgeving in 2022. One row per code would label a 2023 chart with 2026's words. A few
     hundred rows is nothing.
 
-    Keyed by the rolled-up code, so 6.71a..d and 6.711..714 both collapse into 6.71 — the same
-    key space as Iv3Summary.lasten_per_taakveld, which is what the donut joins against.
+    Keyed like Iv3Summary.lasten_per_taakveld: lettered subcodes are grouped through 2024,
+    while the official three-digit subcodes are shown separately from 2025 onward.
     """
 
     jaar = models.IntegerField()
@@ -291,6 +285,8 @@ class Iv3Taakveld(models.Model):
     titel = models.CharField(max_length=128)
 
     class Meta:
+        verbose_name = "IV3-taakveld"
+        verbose_name_plural = "IV3-taakvelden"
         constraints = [
             models.UniqueConstraint(fields=["jaar", "code"], name="unique_iv3_taakveld_row")
         ]
@@ -353,6 +349,9 @@ class Measure(models.Model):
     page = models.CharField(max_length=255, blank=True, default="")
 
     class Meta:
+        # "Formule" is what the instellingen page calls these.
+        verbose_name = "Formule"
+        verbose_name_plural = "Formules"
         ordering = ["key"]
 
     def __str__(self):

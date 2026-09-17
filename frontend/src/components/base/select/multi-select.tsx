@@ -197,6 +197,18 @@ const MultiSelectRoot = ({
         setSearchValue("");
     }, []);
 
+    // The popover unmounts when it closes but this component does not, so a search typed on one
+    // visit was still filtering the list on the next — reopening "Referentiegroep" after looking
+    // up one gemeente showed that gemeente and a handful of near-matches rather than the 342
+    // there are. The stale term does sit in the search box, but a list is opened to be browsed,
+    // and having to notice and clear a filter nobody asked for first is the annoyance.
+    //
+    // Cleared on the way out rather than on the way in, so the list is already whole by the time
+    // it animates open instead of visibly unfiltering itself.
+    const handleOpenChange = useCallback((isOpen: boolean) => {
+        if (!isOpen) setSearchValue("");
+    }, []);
+
     return (
         <SelectContext.Provider value={{ size }}>
             <div className={cx("flex flex-col gap-1.5", className)}>
@@ -206,7 +218,7 @@ const MultiSelectRoot = ({
                     </Label>
                 )}
 
-                <AriaDialogTrigger>
+                <AriaDialogTrigger onOpenChange={handleOpenChange}>
                     <AriaButton
                         ref={triggerRef}
                         isDisabled={isDisabled}
@@ -279,24 +291,38 @@ const MultiSelectRoot = ({
                                     </div>
                                 )}
 
-                                <AriaListBox
-                                    aria-label={label || "Opties"}
-                                    items={items}
-                                    selectionMode="multiple"
-                                    selectedKeys={selectedKeys}
-                                    defaultSelectedKeys={defaultSelectedKeys}
-                                    onSelectionChange={onSelectionChange}
-                                    renderEmptyState={() => (
-                                        <MultiSelectEmptyState
-                                            title={emptyStateTitle}
-                                            description={emptyStateDescription}
-                                            onClearSearch={searchValue ? handleClearSearch : undefined}
-                                        />
+                                {/*
+                                 * The scroll container is this wrapper rather than the listbox itself. Inside
+                                 * AriaAutocomplete the listbox uses virtual focus (aria-activedescendant), so
+                                 * neither it nor its options are tabbable — a keyboard user would have no way to
+                                 * scroll the overflowing options. Giving the wrapper a tab stop fixes that.
+                                 */}
+                                <div
+                                    tabIndex={0}
+                                    className={cx(
+                                        "overflow-y-auto outline-focus-ring focus-visible:outline-2 focus-visible:-outline-offset-2",
+                                        popoverMaxHeights[size],
                                     )}
-                                    className={cx("overflow-y-auto py-1 outline-hidden", popoverMaxHeights[size])}
                                 >
-                                    {children}
-                                </AriaListBox>
+                                    <AriaListBox
+                                        aria-label={label || "Opties"}
+                                        items={items}
+                                        selectionMode="multiple"
+                                        selectedKeys={selectedKeys}
+                                        defaultSelectedKeys={defaultSelectedKeys}
+                                        onSelectionChange={onSelectionChange}
+                                        renderEmptyState={() => (
+                                            <MultiSelectEmptyState
+                                                title={emptyStateTitle}
+                                                description={emptyStateDescription}
+                                                onClearSearch={searchValue ? handleClearSearch : undefined}
+                                            />
+                                        )}
+                                        className="py-1 outline-hidden"
+                                    >
+                                        {children}
+                                    </AriaListBox>
+                                </div>
                             </AriaAutocomplete>
 
                             {showFooter && <MultiSelectFooter size={size} onReset={onReset} onSelectAll={onSelectAll} />}

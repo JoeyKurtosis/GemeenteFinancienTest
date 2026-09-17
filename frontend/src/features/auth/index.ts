@@ -4,4 +4,4 @@ export { SignupRouteView } from "./components/signup-route-view";
 export { ForgotPasswordRouteView } from "./components/forgot-password-route-view";
 export { TwoFactorRouteView } from "./components/two-factor-route-view";
 export { PasswordResetRouteView } from "./components/password-reset-route-view";
-export type { User } from "./api";
+export type { LoginResponse, SignupResponse, User } from "./api";

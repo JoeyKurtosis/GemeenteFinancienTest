@@ -12,8 +12,7 @@
 export type ChartRoute =
     | "/trends"
     | "/benchmark"
-    | "/managementoverzicht"
-    | "/begroting"
+    | "/in-een-oogopslag"
     | "/lasten"
     | "/lasten/bestuur-en-ondersteuning"
     | "/lasten/veiligheid"
@@ -60,11 +59,14 @@ const BATEN: Record<string, Bestemming> = {
 const ENKELVOUDIG: Record<string, Bestemming> = {
     trends: { to: "/trends", label: "Trends" },
     benchmark: { to: "/benchmark", label: "Benchmark" },
-    managementoverzicht: { to: "/managementoverzicht", label: "Managementoverzicht" },
-    // The three Begroting pages draw the same seven cards under the same titles
-    // (begrotingPagina), so a "begroting:"-comment belongs to all three at once. The overview
-    // is where it is sent back to.
-    begroting: { to: "/begroting", label: "Begroting" },
+    // Het managementoverzicht is geen eigen pagina meer maar een sectie van In één oogopslag.
+    // De prefix blijft "managementoverzicht:" — die staat zo bij de opgeslagen reacties.
+    managementoverzicht: { to: "/in-een-oogopslag", label: "In één oogopslag · Managementoverzicht" },
+    // In één oogopslag and Begroting versus Jaarrekening draw the same seven cards under the
+    // same titles (begrotingPagina), so a "begroting:"-comment belongs to both at once. The
+    // overview is where it is sent back to. The prefix stays "begroting:" whatever the pages
+    // are called — it is what the stored comments carry.
+    begroting: { to: "/in-een-oogopslag", label: "In één oogopslag" },
 };
 
 export interface ChartBeschrijving {

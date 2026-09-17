@@ -78,7 +78,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"\nAll {len(URLS)} endpoints within {budget} queries."))
 
     def _run(self, budget: int) -> list[str]:
-        client = Client()
+        client = Client(HTTP_HOST="localhost")
         over = []
 
         for url in URLS:

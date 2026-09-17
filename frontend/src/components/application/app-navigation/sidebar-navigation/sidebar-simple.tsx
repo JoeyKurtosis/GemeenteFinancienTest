@@ -8,7 +8,6 @@ import Logo from "@/assets/icons/logo_venster.svg?react";
 import LogoMini from "@/assets/icons/logo_venster_mobile.svg?react";
 import { Button } from "@/components/base/buttons/button";
 import { Tooltip } from "@/components/base/tooltip/tooltip";
-import { FilterSummary } from "@/features/filters";
 import { useSidebarCollapsed } from "@/hooks/use-sidebar-collapsed";
 import { cx } from "@/utils/cx";
 import { MobileNavigationHeader } from "../base-components/mobile-header";
@@ -83,47 +82,41 @@ export const SidebarNavigationSimple = ({
                             <LogoMini className="h-9 w-auto" />
                         </Link>
 
-                        {/* No room for the summary on the rail — the popover carries the values. */}
+                        {/* 72px fits an icon and nothing else, so the rail is the one state where
+                            the filters stay behind a button. Expanded they sit in the sidebar. */}
                         <AriaDialogTrigger>
                             <Tooltip title="Filters" placement="right">
                                 <Button aria-label="Filters" color="secondary" size="sm" iconLeading={FilterFunnel01} />
                             </Tooltip>
                             <AriaPopover placement="right top" offset={8} crossOffset={-4} className={popoverAnimation}>
                                 <AriaDialog className="w-72 rounded-xl bg-primary p-4 shadow-lg ring-1 ring-secondary outline-hidden">
-                                    {({ close }) => <SidebarFilters onApply={close} />}
+                                    <SidebarFilters />
                                 </AriaDialog>
                             </AriaPopover>
                         </AriaDialogTrigger>
                     </>
                 ) : (
-                    <>
-                        <Link to="/" search={true} aria-label="Home">
-                            <Logo className="h-11.25 text-[#133556] dark:text-white" />
-                        </Link>
-
-                        <div className="flex flex-col gap-2.5">
-                            <AriaDialogTrigger>
-                                <Button color="secondary" size="sm" className="w-full justify-start" iconLeading={FilterFunnel01}>
-                                    Filters
-                                </Button>
-                                <AriaPopover placement="right top" offset={28} crossOffset={-4} className={popoverAnimation}>
-                                    <AriaDialog className="w-72 rounded-xl bg-primary p-4 shadow-lg ring-1 ring-secondary outline-hidden">
-                                        {({ close }) => <SidebarFilters onApply={close} />}
-                                    </AriaDialog>
-                                </AriaPopover>
-                            </AriaDialogTrigger>
-
-                            {/* What the charts are actually filtered to. Under the button rather
-                                than inside it: the values are read far more often than they are
-                                changed, and a control is a poor place to keep a label. */}
-                            <FilterSummary />
-                        </div>
-                    </>
+                    <Link to="/" search={true} aria-label="Home">
+                        <Logo className="h-11.25 text-[#133556] dark:text-white" />
+                    </Link>
                 )}
             </div>
 
-            {/* Scrollable middle: nav list. Filters live in the header popover. */}
+            {/* Scrollable middle: the filters themselves when there is room for them, then the nav
+                list. Expanded there is no reason to hide 280px of controls behind a button; the
+                rail is the only place they do not fit, and there the funnel popover carries them.
+
+                Here rather than in the fixed header above: the controls are tall enough that a
+                short viewport would push the nav list off the bottom, and inside this scroller
+                everything stays reachable. */}
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+                {!isCollapsed && (
+                    <>
+                        <SidebarFilters className="px-4 pt-5 lg:px-5" />
+                        <hr className="mx-4 mt-5 h-px border-none bg-border-secondary lg:mx-5" />
+                    </>
+                )}
+
                 <NavList activeUrl={activeUrl} items={items} collapsed={isCollapsed} />
             </div>
 

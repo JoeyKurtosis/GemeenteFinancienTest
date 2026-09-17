@@ -1,4 +1,5 @@
-import { type ChartSeries, type ChartType, formatValue, type ValueFormat } from "@/components/charts/chart-card";
+import type { ChartSeries, ChartType } from "@/components/charts/chart-card";
+import { formatValue, type ValueFormat } from "@/components/charts/chart-format";
 import type { Begroting, BegrotingWeergave, Cohort, VerdelingPayload } from "../api";
 
 // ── Colors (Untitled UI utility tokens) ──────────────────────────────────────
@@ -61,14 +62,14 @@ export function verdelingSeries(verdeling?: VerdelingPayload | null): ChartSerie
     }));
 }
 
-const euro = new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-    maximumFractionDigits: 0,
-});
-
-/** The Resultaat card prints its figures rather than plotting them. */
-export const formatEuro = (waarde: number | null): string => (waarde === null ? "—" : euro.format(waarde));
+/**
+ * The Resultaat card prints its figures rather than plotting them.
+ *
+ * Through `formatValue` rather than through an Intl instance of its own: Intl rounds half away
+ * from zero, which disagrees with the backend on a negative bedrag, and prints "€ -0" for a
+ * resultaat between −1 and 0 — which is exactly what a nearly balanced gemeente has.
+ */
+export const formatEuro = (waarde: number | null): string => (waarde === null ? "—" : formatValue(waarde, "euro"));
 
 /** The same card in absolute bedragen, where the figures run to ten digits. */
 export const formatEuroCompact = (waarde: number | null): string =>

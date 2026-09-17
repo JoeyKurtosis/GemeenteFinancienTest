@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { LastenSociaalDomeinRouteView } from "@/features/lasten";
+import { lastenUitleg, LastenSociaalDomeinRouteView } from "@/features/lasten";
 
 export const Route = createFileRoute("/_layout/lasten/sociaal-domein")({
     component: LastenSociaalDomeinRouteView,
@@ -8,5 +8,6 @@ export const Route = createFileRoute("/_layout/lasten/sociaal-domein")({
         description: "Lasten per taakveld",
         showBreadCrumbs: true,
         crumbLabels: { lasten: "Lasten", "sociaal-domein": "Sociaal domein" },
+        subContent: lastenUitleg("6"),
     }),
 });

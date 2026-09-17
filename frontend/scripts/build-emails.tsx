@@ -10,6 +10,7 @@ import { mkdirSync, writeFileSync } from "fs";
 import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 
+import AccountDeletedEmail from "../src/emails/account-deleted";
 import PasswordResetEmail from "../src/emails/password-reset";
 import TwoFactorCodeEmail from "../src/emails/two-factor-code";
 import WelcomeEmail from "../src/emails/welcome";
@@ -18,6 +19,20 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUTPUT_DIR = resolve(__dirname, "../../backend/users/templates/emails");
 
 const templates: Record<string, { element: React.ReactElement; plainText: string }> = {
+    "account-deleted.html": {
+        element: AccountDeletedEmail({ name: "{{ name }}" }),
+        plainText: [
+            "Beste {{ name }},",
+            "",
+            "Je account bij Gemeentefinanciën is verwijderd. Je persoonlijke gegevens en",
+            "je notities zijn permanent gewist en zijn niet meer terug te halen.",
+            "",
+            "Heb je dit niet zelf gedaan? Neem dan contact met ons op.",
+            "",
+            "Met vriendelijke groet,",
+            "Het Gemeentefinanciën team",
+        ].join("\n"),
+    },
     "password-reset.html": {
         element: PasswordResetEmail({ resetUrl: "{{ reset_url }}" }),
         plainText: [
@@ -26,8 +41,8 @@ const templates: Record<string, { element: React.ReactElement; plainText: string
             "Gebruik deze link om een nieuw wachtwoord in te stellen:",
             "{{ reset_url }}",
             "",
-            "Deze link is 1 uur geldig.",
-            "Als je dit niet hebt aangevraagd, kun je deze e-mail negeren.",
+            "Deze link is 1 uur geldig. Als je dit niet hebt aangevraagd, kun je deze",
+            "e-mail negeren.",
             "",
             "Met vriendelijke groet,",
             "Het Gemeentefinanciën team",
@@ -36,13 +51,11 @@ const templates: Record<string, { element: React.ReactElement; plainText: string
     "two-factor-code.html": {
         element: TwoFactorCodeEmail({ code: "{{ code }}" }),
         plainText: [
-            "Je verificatiecode is: {{ code }}",
+            "Gebruik de volgende code om door te gaan:",
+            "",
+            "{{ code }}",
             "",
             "Deze code is 10 minuten geldig.",
-            "Als je niet hebt geprobeerd in te loggen, wijzig dan direct je wachtwoord.",
-            "",
-            "Met vriendelijke groet,",
-            "Het Gemeentefinanciën team",
         ].join("\n"),
     },
     "welcome.html": {
@@ -50,8 +63,9 @@ const templates: Record<string, { element: React.ReactElement; plainText: string
         plainText: [
             "Beste {{ name }},",
             "",
-            "Bedankt voor het aanmaken van je account bij Gemeentefinanciën.",
-            "Je hebt nu toegang tot het dashboard.",
+            "Bedankt voor het aanmaken van je account. Je hebt nu toegang tot het",
+            "dashboard dat inzicht biedt in de inkomsten en uitgaven van gemeenten",
+            "in Nederland.",
             "",
             "Log in via: {{ login_url }}",
             "",

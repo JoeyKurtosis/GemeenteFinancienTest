@@ -1,11 +1,10 @@
-Django==5.2.2
+Django==5.2.17
 djangorestframework==3.16.0
 django-cors-headers==4.7.0
-python-dotenv==1.1.0
-requests==2.32.3
-Pillow==11.2.1
+python-dotenv==1.2.2
+requests==2.34.2
+Pillow==12.3.0
 psycopg[binary]==3.2.9
 boto3==1.35.0
 gunicorn==23.0.0
 whitenoise==6.8.2
-django-ses==4.3.0

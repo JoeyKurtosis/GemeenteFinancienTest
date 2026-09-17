@@ -1,0 +1,9 @@
+Beste {{ name }},
+
+Je account bij Gemeentefinanciën is verwijderd. Je persoonlijke gegevens en
+je notities zijn permanent gewist en zijn niet meer terug te halen.
+
+Heb je dit niet zelf gedaan? Neem dan contact met ons op.
+
+Met vriendelijke groet,
+Het Gemeentefinanciën team

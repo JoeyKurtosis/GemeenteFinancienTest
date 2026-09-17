@@ -3,7 +3,7 @@ import { DonutComparisonCard } from "@/components/charts/donut-comparison-card";
 import { InfoCard } from "@/components/charts/info-card";
 import { useChartComments } from "@/features/comments";
 import { useBenchmark } from "../hooks/use-benchmark";
-import { donutSide, personeelSeries, taakveldCategories, trendSeries, uitlegParagraphs } from "./benchmark-charts";
+import { donutSide, personeelSeries, taakveldCategories, trendSeries } from "./benchmark-charts";
 
 export function BenchmarkRouteView() {
     const { data, isLoading, error } = useBenchmark();
@@ -25,13 +25,30 @@ export function BenchmarkRouteView() {
     const landelijkLabel = data?.cohorten.find((cohort) => cohort.key === "landelijk")?.label;
     const categorie = (data?.categorie ?? []).filter((row) => row.name !== landelijkLabel);
 
-    const chartIds = ["benchmark:Trend", "benchmark:Referentiegroep", "benchmark:Personele lasten per inwoner per categorie"];
+    const chartIds = [
+        "benchmark:Trend",
+        "benchmark:Referentiegroep",
+        "benchmark:Personele lasten per inwoner per categorie",
+        "benchmark:Personele lasten per inwoner per taakveld",
+    ];
     const { commentsMap, invalidate } = useChartComments(chartIds);
 
     return (
         <section className="grid gap-6 lg:grid-cols-2">
-            <InfoCard title="Uitleg" paragraphs={uitlegParagraphs} />
-
+            {(taakvelden || isLoading) && (
+                <DonutComparisonCard
+                    title="Personele lasten per inwoner per taakveld"
+                    isLoading={isLoading || !taakvelden}
+                    categories={taakvelden ? taakveldCategories(taakvelden) : []}
+                    left={taakvelden ? donutSide(taakvelden, taakvelden.links) : null}
+                    right={taakvelden ? donutSide(taakvelden, taakvelden.rechts) : null}
+                    expandable
+                    className="col-span-2"
+                    chartId="benchmark:Personele lasten per inwoner per taakveld"
+                    comment={commentsMap.get("benchmark:Personele lasten per inwoner per taakveld")}
+                    onCommentChange={invalidate}
+                />
+            )}
             <ChartCard
                 title="Trend"
                 data={data?.trend ?? []}
@@ -44,16 +61,17 @@ export function BenchmarkRouteView() {
                 onCommentChange={invalidate}
             />
 
-            {taakvelden && (
-                <DonutComparisonCard
-                    title="Personele lasten per inwoner per taakveld"
-                    categories={taakveldCategories(taakvelden)}
-                    left={donutSide(taakvelden, taakvelden.links)}
-                    right={donutSide(taakvelden, taakvelden.rechts)}
-                    expandable
-                    className="col-span-2"
-                />
-            )}
+            <ChartCard
+                title="Personele lasten per inwoner per categorie"
+                data={categorie}
+                series={personeelSeries}
+                chartType="horizontal-bar"
+                isLoading={isLoading}
+                expandable
+                chartId="benchmark:Personele lasten per inwoner per categorie"
+                comment={commentsMap.get("benchmark:Personele lasten per inwoner per categorie")}
+                onCommentChange={invalidate}
+            />
 
             {/* Without a referentiegroep there are no gemeenten to draw, so the card says so
                 rather than showing an empty chart. */}
@@ -73,18 +91,6 @@ export function BenchmarkRouteView() {
             ) : (
                 <InfoCard title="Referentiegroep" paragraphs={["Kies gemeenten in de referentiegroep om hun personele lasten naast elkaar te zien."]} />
             )}
-
-            <ChartCard
-                title="Personele lasten per inwoner per categorie"
-                data={categorie}
-                series={personeelSeries}
-                chartType="horizontal-bar"
-                isLoading={isLoading}
-                expandable
-                chartId="benchmark:Personele lasten per inwoner per categorie"
-                comment={commentsMap.get("benchmark:Personele lasten per inwoner per categorie")}
-                onCommentChange={invalidate}
-            />
         </section>
     );
 }

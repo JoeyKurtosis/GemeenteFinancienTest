@@ -1,4 +1,5 @@
 import type { ChartSeries } from "@/components/charts/chart-card";
+import { formatValue } from "@/components/charts/chart-format";
 import type { DonutSlice } from "@/components/charts/donut-chart";
 import type { Cohort, Lasten, LastenTaakveld, VerdelingZijde } from "../api";
 
@@ -89,8 +90,7 @@ export function categorieSeries(categorie?: Categorie | null): ChartSeries[] {
 }
 
 /** Euro per inhabitant, whole euros — the cents are noise at this scale. */
-const euro = (bedrag: number | null) =>
-    bedrag === null ? "—" : `€ ${Math.round(bedrag).toLocaleString("nl-NL")}`;
+const euro = (bedrag: number | null) => (bedrag === null ? "—" : formatValue(bedrag, "euro"));
 
 // ── Per page ─────────────────────────────────────────────────────────────────
 

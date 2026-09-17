@@ -1,4 +1,4 @@
-import { type ReactNode, createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { type ReactNode, createContext, useCallback, useContext, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import type { Key, Selection } from "react-aria-components";
@@ -27,9 +27,8 @@ const BEGROTING_SUFFIX = "000";
  * a user reading Jaarrekeningen stays on Jaarrekeningen — and a Begroting otherwise, that
  * being the one every year carries.
  *
- * Used twice, and it has to be the same rule both times: the corrections pass re-points the
- * *applied* verslagsoort in the URL, and onJaarChange re-points the *draft* one so the sidebar
- * already shows what applying would land on.
+ * Used twice, and it has to be the same rule both times: the corrections pass repairs an
+ * invalid URL, and onJaarChange pairs a new year with its verslagsoort in one URL update.
  */
 const herpuntVerslagsoort = (opties: FilterOption[], huidig?: string): string | undefined => {
     if (opties.length === 0) return undefined;
@@ -81,13 +80,10 @@ interface FiltersContextValue {
      */
     isReady: boolean;
 
-    /** What the pages query with — only changes when the user presses "Toepassen". */
+    /** The filters currently encoded in the URL and used by the pages. */
     applied: AppliedFilters;
 
-    /**
-     * The pending selections shown in the sidebar. Editing these does not touch the URL
-     * or refetch anything until `apply()` is called.
-     */
+    /** The selections shown in the sidebar. Selection changes are written straight to the URL. */
     selectedGemeente: Key | null;
     onGemeenteChange: (key: Key | null) => void;
     selectedReferentiegroepen: Selection;
@@ -95,12 +91,8 @@ interface FiltersContextValue {
     /** Each selected size class is drawn as a line of its own on the charts. */
     selectedInwonergroepen: Selection;
     onInwonergroepenChange: (keys: Selection) => void;
-    /**
-     * The verslagsoorten of the *draft* year — what the sidebar's select must offer, and how
-     * it knows whether that year has a Jaarrekening at all. `options.verslagsoorten` is the
-     * applied year's and belongs to the corrections pass; do not use it to render the select.
-     */
-    draftVerslagsoorten: FilterOption[];
+    /** The verslagsoorten available for the selected year. */
+    availableVerslagsoorten: FilterOption[];
     selectedVerslagsoort: Key | null;
     onVerslagsoortChange: (key: Key | null) => void;
     selectedJaar: Key | null;
@@ -108,34 +100,18 @@ interface FiltersContextValue {
     reservemutaties: boolean;
     onReservemutatiesChange: (value: boolean) => void;
 
-    /** True when the pending selections differ from the applied ones. */
-    hasPendingChanges: boolean;
-    /** Commits the pending selections to the URL, which is what makes the pages refetch. */
-    apply: () => void;
     reset: () => void;
 
     /**
-     * Commits a referentiegroep straight to the URL, bypassing the draft entirely.
+     * Commits a referentiegroep straight to the URL.
      *
-     * For a page that composes a selection of its own and applies it with its own button. Such
-     * a page must not write to the draft as it goes: the draft is what the sidebar *shows*, so
-     * every click would move the sidebar's dropdown under the user long before they asked for
-     * it. It writes here instead, once, when they press the button — and the draft then falls
-     * in line with the URL like it does after any other apply.
+     * Used by the dedicated Referentiegroep page, which keeps its own working selection until
+     * the user presses that page's Toepassen button.
      */
-    applyReferentiegroepen: (keys: Selection) => void;
+    applyReferentiegroepen: (keys: Selection, terugNaar?: string) => void;
 }
 
 const FiltersContext = createContext<FiltersContextValue | undefined>(undefined);
-
-/** Order-independent comparison of the six filter keys. */
-const isSameSearch = (a: FiltersSearch, b: FiltersSearch) =>
-    a.gemeente === b.gemeente &&
-    a.referentie === b.referentie &&
-    a.inwoner === b.inwoner &&
-    a.verslagsoort === b.verslagsoort &&
-    a.jaar === b.jaar &&
-    resolveReserve(a.reserve) === resolveReserve(b.reserve);
 
 const toSelection = (value?: string): Selection => (value === ALLE_SELECTIE ? "all" : value === GEEN_SELECTIE ? new Set<Key>() : new Set(parseCodes(value)));
 
@@ -158,19 +134,14 @@ const toSelection = (value?: string): Selection => (value === ALLE_SELECTIE ? "a
  * (validateSearch: validateFiltersSearch). The alternative is `as any` at both call sites, which
  * would type the patches as unknown rather than as FiltersSearch.
  */
-type SearchNavigate = (opts: { search: FiltersSearch | ((prev: FiltersSearch) => FiltersSearch); replace?: boolean }) => void;
+type SearchNavigate = (opts: { to?: string; search: FiltersSearch | ((prev: FiltersSearch) => FiltersSearch); replace?: boolean }) => void;
 
 export const FiltersProvider = ({ children }: { children: ReactNode }) => {
     const search = useSearch({ strict: false }) as FiltersSearch;
     const navigate = useNavigate() as unknown as SearchNavigate;
 
-    // The URL holds the *applied* filters; `draft` holds what the sidebar shows. The two
-    // only meet when the user presses "Toepassen" — that is what keeps the charts from
-    // refetching on every dropdown along the way.
-    const [draft, setDraft] = useState<FiltersSearch>(() => ({ ...DEFAULT_SEARCH, ...search }));
-
-    // `replace` keeps the back button meaningful: it steps between pages, not between
-    // every set of filters the user applied on the way.
+    // `replace` keeps the back button meaningful: it steps between pages, not between every
+    // filter selection. Search text stays inside the select components and never reaches here.
     const patchSearch = useCallback(
         (patch: Partial<FiltersSearch>) => {
             navigate({ search: (prev: FiltersSearch) => ({ ...prev, ...patch }), replace: true });
@@ -185,27 +156,21 @@ export const FiltersProvider = ({ children }: { children: ReactNode }) => {
     const isSentinelInwoner = isSentinelSelectie(inwoner);
     const inwonerCodes = useMemo(() => (isSentinelInwoner ? [] : parseCodes(inwoner)), [isSentinelInwoner, inwoner]);
 
+    // Keep the group identity stable when another filter changes, so the reference-group
+    // page does not reset its unapplied selection when the user chooses a gemeente.
+    const appliedReferentiegroepen = useMemo(() => toSelection(referentie), [referentie]);
+
     const applied = useMemo<AppliedFilters>(
         () => ({
             gemeente: gemeente ?? null,
-            referentiegroepen: toSelection(referentie),
+            referentiegroepen: appliedReferentiegroepen,
             inwonergroepen: toSelection(inwoner),
             verslagsoort: verslagsoort ?? null,
             jaar: jaar ?? null,
             reservemutaties: resolveReserve(reserve),
         }),
-        [gemeente, referentie, inwoner, verslagsoort, jaar, reserve],
+        [gemeente, appliedReferentiegroepen, inwoner, verslagsoort, jaar, reserve],
     );
-
-    // The applied filters are the source of truth: pull the draft back in line whenever
-    // they change under it (Toepassen, Reset, the corrections pass below, the back button).
-    //
-    // Merged over the defaults, so a filter the URL has not been given yet shows the value the
-    // corrections pass is about to write rather than an empty select for a render or two.
-    useEffect(() => {
-        const next = { ...DEFAULT_SEARCH, ...search };
-        setDraft((current) => (isSameSearch(current, next) ? current : next));
-    }, [search]);
 
     // Refetches whenever the applied year changes: the gemeente list shrinks over time
     // (388 in 2017, 342 today) and the newest year may not have a Jaarrekening yet.
@@ -261,8 +226,8 @@ export const FiltersProvider = ({ children }: { children: ReactNode }) => {
         // branch has always guarded this way; the other three now agree with it.
         // The newest year the data carries, which only /filters/ can name — see DEFAULT_SEARCH.
         // `options.jaar` is the backend's own resolution of what was asked for, so a request
-        // that named no year comes back carrying the newest one rather than null.
-        if (jaar === undefined && options.jaar !== null) {
+        // that named no year or an unavailable year comes back carrying the newest one.
+        if (options.jaar !== null && jaar !== options.jaar) {
             patch.jaar = options.jaar;
         }
 
@@ -322,40 +287,30 @@ export const FiltersProvider = ({ children }: { children: ReactNode }) => {
      */
     const isReady = !isLoading && Object.keys(corrections).length === 0;
 
-    const apply = useCallback(() => {
-        patchSearch(draft);
-    }, [draft, patchSearch]);
-
     const reset = useCallback(() => {
         navigate({ search: { ...DEFAULT_SEARCH }, replace: true });
     }, [navigate]);
 
     const applyReferentiegroepen = useCallback(
-        (keys: Selection) => patchSearch({ referentie: serializeSelectie(keys, options.gemeenten) }),
-        [patchSearch, options.gemeenten],
+        (keys: Selection, terugNaar?: string) => {
+            const referentie = serializeSelectie(keys, options.gemeenten);
+            if (terugNaar) {
+                navigate({ to: terugNaar, search: (prev: FiltersSearch) => ({ ...prev, referentie, terug: undefined }), replace: true });
+                return;
+            }
+            patchSearch({ referentie });
+        },
+        [navigate, patchSearch, options.gemeenten],
     );
 
-    const setDraftValue = useCallback((patch: Partial<FiltersSearch>) => {
-        setDraft((current) => ({ ...current, ...patch }));
-    }, []);
-
-    // What the sidebar's Verslagsoort select offers: the *draft* year's verslagsoorten, so
-    // picking a year that has a Jaarrekening reveals the choice there and then rather than one
-    // Toepassen later. `options.verslagsoorten` stays the applied year's and is what the
-    // corrections pass prunes the URL against — the two must not be crossed.
-    //
-    // Falls back to the applied year's list while the per-year map is still empty (options not
-    // loaded, or a failed /filters/), which is the same list the select showed before.
-    const draftVerslagsoorten = useMemo(
-        () => options.verslagsoortenPerJaar[String(draft.jaar)] ?? options.verslagsoorten,
-        [options.verslagsoortenPerJaar, options.verslagsoorten, draft.jaar],
+    // The all-years map lets a year selection and its compatible verslagsoort be committed in
+    // one URL update. The per-year request then replaces this list with that year's own options.
+    const availableVerslagsoorten = useMemo(
+        () => options.verslagsoortenPerJaar[String(jaar)] ?? options.verslagsoorten,
+        [options.verslagsoortenPerJaar, options.verslagsoorten, jaar],
     );
 
-    // Memoized because everything under this provider consumes it, charts included. Every
-    // sidebar interaction moves the draft, and a fresh object literal here handed all of them a
-    // new context value — re-rendering all fourteen recharts trees on Trends on
-    // every keystroke, long before anyone pressed Toepassen. Nothing refetched (the queries key
-    // off the applied filters, not the draft), but the render was paid all the same.
+    // Memoized because everything under this provider consumes it, charts included.
     const value = useMemo<FiltersContextValue>(
         () => ({
             options,
@@ -364,46 +319,65 @@ export const FiltersProvider = ({ children }: { children: ReactNode }) => {
             isReady,
             applied,
 
-            selectedGemeente: draft.gemeente ?? null,
-            onGemeenteChange: (key) => setDraftValue({ gemeente: key ? String(key) : undefined }),
+            selectedGemeente: gemeente ?? DEFAULT_SEARCH.gemeente ?? null,
+            // React Aria may report null while the user replaces the input text. Only an actual
+            // option selection is a filter change; searching must leave the current URL alone.
+            onGemeenteChange: (key) => {
+                if (key !== null) patchSearch({ gemeente: String(key) });
+            },
 
-            selectedReferentiegroepen: toSelection(draft.referentie),
+            selectedReferentiegroepen: toSelection(referentie ?? DEFAULT_SEARCH.referentie),
             // The "Alles" row hands back every gemeente as an explicit set; serializeSelectie
             // collapses that back into the sentinel so it round-trips as `referentie=alle`.
-            onReferentiegroepenChange: (keys) => setDraftValue({ referentie: serializeSelectie(keys, options.gemeenten) }),
+            onReferentiegroepenChange: (keys) => patchSearch({ referentie: serializeSelectie(keys, options.gemeenten) }),
 
-            selectedInwonergroepen: toSelection(draft.inwoner),
-            onInwonergroepenChange: (keys) => setDraftValue({ inwoner: serializeSelectie(keys, options.inwonergroepen) }),
+            selectedInwonergroepen: toSelection(inwoner ?? DEFAULT_SEARCH.inwoner),
+            onInwonergroepenChange: (keys) => patchSearch({ inwoner: serializeSelectie(keys, options.inwonergroepen) }),
 
-            draftVerslagsoorten,
-            selectedVerslagsoort: draft.verslagsoort ?? null,
-            onVerslagsoortChange: (key) => setDraftValue({ verslagsoort: key ? String(key) : undefined }),
+            availableVerslagsoorten,
+            selectedVerslagsoort: verslagsoort ?? null,
+            onVerslagsoortChange: (key) => {
+                if (key !== null) patchSearch({ verslagsoort: String(key) });
+            },
 
-            selectedJaar: draft.jaar ? String(draft.jaar) : null,
-            // The verslagsoort moves with the year, in the draft as well as in the URL. Without it
-            // the select would sit on a code belonging to the year the user just left — unmatched by
-            // any of its items, so blank — and the corrections pass would only sort that out one
-            // Toepassen later. Same rule the corrections pass applies; see herpuntVerslagsoort.
+            selectedJaar: jaar ? String(jaar) : null,
+            // Move the verslagsoort with the year in the same URL update so chart queries never
+            // observe a report code belonging to the previous year.
             onJaarChange: (key) => {
-                const nieuwJaar = key ? Number(key) : undefined;
-                const opties = nieuwJaar ? (options.verslagsoortenPerJaar[String(nieuwJaar)] ?? []) : [];
-                setDraftValue({
+                if (key === null) return;
+                const nieuwJaar = Number(key);
+                const opties = options.verslagsoortenPerJaar[String(nieuwJaar)] ?? [];
+                patchSearch({
                     jaar: nieuwJaar,
-                    verslagsoort: herpuntVerslagsoort(opties, draft.verslagsoort) ?? draft.verslagsoort,
+                    verslagsoort: herpuntVerslagsoort(opties, verslagsoort) ?? verslagsoort,
                 });
             },
 
-            reservemutaties: resolveReserve(draft.reserve),
+            reservemutaties: resolveReserve(reserve),
             // Written out either way: with the default on, dropping `false` from the URL would
             // read back as "not chosen yet" and switch the toggle on again after a reload.
-            onReservemutatiesChange: (checked) => setDraftValue({ reserve: checked }),
+            onReservemutatiesChange: (checked) => patchSearch({ reserve: checked }),
 
-            hasPendingChanges: !isSameSearch(draft, search),
-            apply,
             reset,
             applyReferentiegroepen,
         }),
-        [options, isLoading, error, isReady, applied, draft, search, draftVerslagsoorten, setDraftValue, apply, reset, applyReferentiegroepen],
+        [
+            options,
+            isLoading,
+            error,
+            isReady,
+            applied,
+            gemeente,
+            referentie,
+            inwoner,
+            verslagsoort,
+            jaar,
+            reserve,
+            availableVerslagsoorten,
+            patchSearch,
+            reset,
+            applyReferentiegroepen,
+        ],
     );
 
     return <FiltersContext.Provider value={value}>{children}</FiltersContext.Provider>;

@@ -13,6 +13,10 @@ class UserProfile(models.Model):
         primary_key=True,
     )
     phone_number = models.CharField(max_length=32, blank=True, default="")
+    # Defaults to True so the accounts that predate signup verification are not locked out, and so
+    # a profile created by anything other than SignupView needs no thought. Only SignupView sets it
+    # to False; TwoFactorVerifyView flips it back on the first successful code.
+    email_verified = models.BooleanField(default=True)
     avatar = models.ImageField(upload_to="avatars/", blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { LastenEconomieRouteView } from "@/features/lasten";
+import { lastenUitleg, LastenEconomieRouteView } from "@/features/lasten";
 
 export const Route = createFileRoute("/_layout/lasten/economie")({
     component: LastenEconomieRouteView,
@@ -8,5 +8,6 @@ export const Route = createFileRoute("/_layout/lasten/economie")({
         description: "Lasten per taakveld",
         showBreadCrumbs: true,
         crumbLabels: { lasten: "Lasten", economie: "Economie" },
+        subContent: lastenUitleg("3"),
     }),
 });

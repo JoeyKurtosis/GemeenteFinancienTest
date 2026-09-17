@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { BenchmarkRouteView } from "@/features/benchmark";
+import { UitlegSubContent } from "@/components/layout/uitleg-sub-content";
+import { benchmarkUitleg, BenchmarkRouteView } from "@/features/benchmark";
 
 export const Route = createFileRoute("/_layout/benchmark")({
     component: BenchmarkRouteView,
@@ -7,5 +8,6 @@ export const Route = createFileRoute("/_layout/benchmark")({
         title: "Benchmark",
         description: "Personele lasten",
         showBreadCrumbs: true,
+        subContent: <UitlegSubContent paragraphs={benchmarkUitleg} />,
     }),
 });

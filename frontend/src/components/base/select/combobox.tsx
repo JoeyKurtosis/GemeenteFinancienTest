@@ -1,8 +1,15 @@
 import type { FC, FocusEventHandler, PointerEventHandler, ReactNode, Ref, RefAttributes } from "react";
-import { isValidElement, useCallback, useContext, useRef, useState } from "react";
+import { isValidElement, useCallback, useRef, useState } from "react";
 import { SearchLg } from "@untitledui/icons";
 import type { ComboBoxProps as AriaComboBoxProps, GroupProps as AriaGroupProps, ListBoxProps as AriaListBoxProps } from "react-aria-components";
-import { ComboBox as AriaComboBox, Group as AriaGroup, Input as AriaInput, ListBox as AriaListBox, ComboBoxStateContext } from "react-aria-components";
+import {
+    ComboBox as AriaComboBox,
+    Group as AriaGroup,
+    Input as AriaInput,
+    ListBox as AriaListBox,
+    ListLayout as AriaListLayout,
+    Virtualizer as AriaVirtualizer,
+} from "react-aria-components";
 import { HintText } from "@/components/base/input/hint-text";
 import { Label } from "@/components/base/input/label";
 import { Popover } from "@/components/base/select/popover";
@@ -10,6 +17,22 @@ import { type CommonProps, SelectContext, type SelectItemType, sizes } from "@/c
 import { useResizeObserver } from "@/hooks/use-resize-observer";
 import { cx } from "@/utils/cx";
 import { isReactComponent } from "@/utils/is-react-component";
+
+/**
+ * What the list may grow to, and roughly how tall one row is, per size.
+ *
+ * The heights are the ones the popover used to clamp itself to; they move onto the listbox
+ * because a virtualized list scrolls itself (see Popover's isScrollable).
+ *
+ * `estimatedRowHeight` rather than a fixed `rowHeight`: it only has to be close, since the
+ * layout measures each row it renders and corrects itself. A row is the item's own py-px plus
+ * the p-2 (p-2.5 at lg) and line height of the label inside it.
+ */
+const listSizes = {
+    sm: { maxHeight: "max-h-56", estimatedRowHeight: 38 },
+    md: { maxHeight: "max-h-64", estimatedRowHeight: 42 },
+    lg: { maxHeight: "max-h-80", estimatedRowHeight: 46 },
+};
 
 interface ComboBoxProps extends Omit<AriaComboBoxProps<SelectItemType>, "children" | "items">, RefAttributes<HTMLDivElement>, CommonProps {
     shortcut?: boolean;
@@ -33,14 +56,6 @@ interface ComboBoxValueProps extends AriaGroupProps {
 }
 
 const ComboBoxValue = ({ size, shortcut, placeholder, shortcutClassName, icon: IconProp, ref, ...otherProps }: ComboBoxValueProps) => {
-    const state = useContext(ComboBoxStateContext);
-
-    const value = state?.selectedItem?.value || null;
-    const inputValue = state?.inputValue || null;
-
-    const first = inputValue?.split(value?.supportingText)?.[0] || "";
-    const last = inputValue?.split(first)[1];
-
     return (
         <AriaGroup
             ref={ref}
@@ -66,18 +81,30 @@ const ComboBoxValue = ({ size, shortcut, placeholder, shortcutClassName, icon: I
                 <SearchLg data-icon className="pointer-events-none" aria-hidden="true" />
             )}
 
-            <div className="relative flex w-full items-center">
-                {inputValue && (
-                    <span className={cx("absolute top-1/2 z-0 inline-flex w-full -translate-y-1/2 truncate", sizes[size].textContainer)} aria-hidden="true">
-                        <p className={cx("font-medium text-primary", sizes[size].text)}>{first}</p>
-                        {last && <p className={cx("-ml-0.75 text-tertiary", sizes[size].text)}>{last}</p>}
-                    </span>
-                )}
-
+            {/*
+             * The input paints its own text. It used to be `text-transparent`, with the value
+             * redrawn beside it by an absolutely positioned span that split it around the item's
+             * supportingText to grey the tail off — an inline-completion effect that could not
+             * survive a value wider than the field: an <input> scrolls its content as the caret
+             * passes the right edge, an absolute span does not. Typing a long gemeente name left
+             * the caret marching off into empty space while the visible text sat frozen and
+             * clipped at the start, which is what made searching here feel broken.
+             *
+             * Nothing was lost with it. The effect only ever showed where an item carried
+             * supportingText, and no ComboBox in this app passes one.
+             */}
+            <div className="flex w-full items-center">
                 <AriaInput
                     placeholder={placeholder}
+                    // Focusing the field selects what is in it, so the first keystroke replaces
+                    // the current choice instead of being spliced into it. Without this, clicking
+                    // a combobox that reads "Aa en Hunze" and typing "ams" leaves the caret where
+                    // it happened to land and searches for "Aa en Hunzeams" — no gemeente matches
+                    // that, so the list empties and the control looks broken. The old value stays
+                    // legible until it is typed over, which is why this beats clearing on open.
+                    onFocus={(event) => event.currentTarget.select()}
                     className={cx(
-                        "z-10 w-full appearance-none bg-transparent text-transparent caret-alpha-black/90 placeholder:text-placeholder focus:outline-hidden disabled:cursor-not-allowed",
+                        "w-full appearance-none bg-transparent font-medium text-primary caret-alpha-black/90 placeholder:font-normal placeholder:text-placeholder focus:outline-hidden disabled:cursor-not-allowed",
                         sizes[size].text,
                     )}
                 />
@@ -156,10 +183,27 @@ export const ComboBox = ({
                             onPointerEnter={onResize}
                         />
 
-                        <Popover size={size} triggerRef={placeholderRef} style={{ width: popoverWidth }} className={otherProps.popoverClassName}>
-                            <AriaListBox items={items} className="size-full outline-hidden">
-                                {children}
-                            </AriaListBox>
+                        <Popover
+                            size={size}
+                            isScrollable={false}
+                            triggerRef={placeholderRef}
+                            style={{ width: popoverWidth }}
+                            className={otherProps.popoverClassName}
+                        >
+                            {/*
+                             * Virtualized because the one combobox in this app picks from every
+                             * gemeente there is. Rendering all 342 rows was a listbox item apiece
+                             * — each with its own focus and selection state — rebuilt on every
+                             * keystroke, since a keystroke changes which of them match. That is
+                             * what made typing a gemeente name lag behind the keyboard. Only the
+                             * dozen rows the popover can actually show are built now, so the cost
+                             * of a keystroke stops growing with the list.
+                             */}
+                            <AriaVirtualizer layout={AriaListLayout} layoutOptions={{ estimatedRowHeight: listSizes[size].estimatedRowHeight }}>
+                                <AriaListBox items={items} className={cx("w-full overflow-y-auto outline-hidden", listSizes[size].maxHeight)}>
+                                    {children}
+                                </AriaListBox>
+                            </AriaVirtualizer>
                         </Popover>
 
                         {otherProps.hint && (

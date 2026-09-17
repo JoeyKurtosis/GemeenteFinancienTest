@@ -1,7 +1,5 @@
-Je verificatiecode is: {{ code }}
+Gebruik de volgende code om door te gaan:
+
+{{ code }}
 
 Deze code is 10 minuten geldig.
-Als je niet hebt geprobeerd in te loggen, wijzig dan direct je wachtwoord.
-
-Met vriendelijke groet,
-Het Gemeentefinanciën team

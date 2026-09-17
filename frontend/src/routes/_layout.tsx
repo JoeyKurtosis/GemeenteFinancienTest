@@ -1,17 +1,15 @@
-import { Outlet, createFileRoute } from "@tanstack/react-router";
+import { Outlet, createFileRoute, useLocation } from "@tanstack/react-router";
+import { AssistantModal } from "@/components/assistant-ui/assistant-modal";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { PageHeader } from "@/components/layout/page-header";
-import { useRouteMetadata } from "@/hooks/use-route-metadata";
-import { useDocumentTitle } from "@/hooks/use-document-title";
-import { AssistantModal } from "@/components/assistant-ui/assistant-modal";
-import { useAuth } from "@/features/auth";
-import { FiltersProvider, validateFiltersSearch } from "@/features/filters";
 import { AssistantProvider } from "@/features/assistant";
+import { FiltersProvider, validateFiltersSearch } from "@/features/filters";
+import { useDocumentTitle } from "@/hooks/use-document-title";
+import { useRouteMetadata } from "@/hooks/use-route-metadata";
 
 function LayoutComponent() {
+    const isAssistantPage = useLocation({ select: (location) => location.pathname.replace(/\/$/, "") === "/assistent" });
     const { title, description, showBreadCrumbs, actions, crumbLabels, subContent } = useRouteMetadata();
-    const { isAuthenticated } = useAuth();
-
     useDocumentTitle(title);
 
     return (
@@ -21,15 +19,21 @@ function LayoutComponent() {
             <AssistantProvider>
                 <div className="flex w-full">
                     <AppSidebar />
-                    <main className="w-full min-w-0 flex-1 overflow-x-clip px-4 pt-18 pb-16 sm:px-6 lg:px-10 lg:pt-8">
+                    <main
+                        id="main-content"
+                        tabIndex={-1}
+                        className={`w-full min-w-0 flex-1 outline-none ${isAssistantPage ? "flex h-dvh min-h-0 flex-col overflow-hidden pt-14 lg:pt-0" : "overflow-x-clip px-4 pt-18 pb-16 sm:px-6 lg:px-10 lg:pt-8"}`}
+                    >
                         {title && (
+                            <div className={isAssistantPage ? "shrink-0 px-4 pt-4 sm:px-6 lg:px-10 lg:pt-8" : undefined}>
                             <PageHeader title={title} description={description} showBreadCrumbs={showBreadCrumbs} actions={actions} crumbLabels={crumbLabels}>
                                 {subContent}
                             </PageHeader>
+                            </div>
                         )}
                         <Outlet />
                     </main>
-                    {isAuthenticated && <AssistantModal />}
+                    {!isAssistantPage && <AssistantModal />}
                 </div>
             </AssistantProvider>
         </FiltersProvider>

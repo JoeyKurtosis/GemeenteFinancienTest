@@ -1,0 +1,1837 @@
+================================================================================
+MEASURES  (47)
+================================================================================
+
+--- MeasureTable | mutatie_selected | other
+IF(
+    CONTAINS(taakvelden,taakvelden[Key_taakveld], "0.10"),
+    1,
+    0
+)
+
+--- MeasureTable | YoY_lasten_pi | managementoverzicht
+IF(
+	ISFILTERED('CalendarTable'[Date]),
+	ERROR("Snelle metingen voor time intelligence kunnen alleen worden gegroepeerd of gefilterd op de datumhiërarchie die door Power BI wordt geleverd of op de primaire datumkolom."),
+	VAR __PREV_YEAR =
+		CALCULATE(
+			[Avg Bedrag Per Gemeente pi - referentie vs selectie],
+			DATEADD('CalendarTable'[Date].[Date], -1, YEAR)
+		)
+	RETURN
+		DIVIDE([Avg Bedrag Per Gemeente pi - referentie vs selectie] - __PREV_YEAR, __PREV_YEAR)
+)
+
+--- MeasureTable | YoY_lasten_pi_text | managementoverzicht
+"versus vorig jaar: " & FORMAT([YoY_lasten_pi], "+0.0%; -0.0%")
+
+--- MeasureTable | solvabiliteit | managementoverzicht
+SUM(solvabiliteit[Solvabiliteit])
+
+--- MeasureTable | YoY_solvabiliteit | managementoverzicht
+IF(
+	ISFILTERED('CalendarTable'[Date]),
+	ERROR("Snelle metingen voor time intelligence kunnen alleen worden gegroepeerd of gefilterd op de datumhiërarchie die door Power BI wordt geleverd of op de primaire datumkolom."),
+	VAR __PREV_YEAR = CALCULATE([Avg Solvabiliteit Per Gemeente pi - referentie vs selectie], DATEADD('CalendarTable'[Date].[Date], -1, YEAR))
+	RETURN
+		DIVIDE([Avg Solvabiliteit Per Gemeente pi - referentie vs selectie] - __PREV_YEAR, __PREV_YEAR)
+)
+
+--- MeasureTable | YoY_solvabiliteit_text | managementoverzicht
+"versus vorig jaar: " & FORMAT([YoY_solvabiliteit], "+0.0%; -0.0%")
+
+--- MeasureTable | count_not_blank | counts
+CALCULATE(
+    COUNT(gemeenten[Gemeentenaam]),
+    FILTER(
+        begrotingen_jaarrekeningen,
+        NOT(ISBLANK(begrotingen_jaarrekeningen[bedrag_per_inwoner]))
+    )
+)
+
+--- MeasureTable | REF_count_not_blank | counts
+CALCULATE(
+    COUNT(gemeenten[Gemeentenaam]),
+    FILTER(
+        begrotingen_jaarrekeningen,
+        NOT(ISBLANK(begrotingen_jaarrekeningen[bedrag_per_inwoner]))
+    )
+)
+
+--- MeasureTable | count_not_blank_solvabiliteit | counts
+CALCULATE(
+    COUNT(gemeenten[Gemeentenaam]),
+    FILTER(
+        solvabiliteit,
+        NOT(ISBLANK(solvabiliteit[Solvabiliteit]))
+    )
+)
+
+--- CalendarTable | titel
+"Complete " & MIN(verslagsoorten[Title])
+
+--- MeasureTable | BG transparent | other
+"rgba(255,255,255,0)"
+
+--- MeasureTable | Avg Bedrag per Inwonersgroep | stand_vd_gemeenten
+VAR InwonerGroupsSummarized = SUMMARIZE(
+    'gemeenten', 
+    'gemeenten'[Inwonergroep], 
+    "TotaleUitgaven", [Totale uitgaven pi] // This captures the total expenditures measure for each Inwonergroep
+)
+
+VAR TotalExpenditures = SUMX(
+    InwonerGroupsSummarized, 
+    [TotaleUitgaven]
+)
+
+VAR NumberOfGemeenten = DISTINCTCOUNT('gemeenten'[Gemeentecode])
+
+RETURN 
+IF(
+    NumberOfGemeenten > 0, 
+    TotalExpenditures / NumberOfGemeenten
+)
+
+--- MeasureTable | YoY Avg Bedrag per Inwonersgroep Change | stand_vd_gemeenten
+IF(
+    ISFILTERED('CalendarTable'[Date]), 
+    ERROR("Time intelligence quick measures can only be grouped or filtered by the date hierarchy provided by Power BI or by the primary date column."),
+    VAR CurrentYearValue = [Avg Bedrag per Inwonersgroep]
+    VAR PreviousYearValue = CALCULATE(
+        [Avg Bedrag per Inwonersgroep],
+        DATEADD('CalendarTable'[Date].[Date], -1, YEAR)
+    )
+    VAR YoYChange = DIVIDE(CurrentYearValue - PreviousYearValue, PreviousYearValue)
+    RETURN YoYChange
+)
+
+--- MeasureTable | Avg Bedrag per Inwonersgroep Last pi | stand_vd_gemeenten
+VAR InwonerGroupsSummarized = SUMMARIZE(
+    'gemeenten', 
+    'gemeenten'[Inwonergroep], 
+    "TotaleUitgaven", [Totale Uitgaven pi Last] // This captures the total expenditures measure for each Inwonergroep
+)
+
+VAR TotalExpenditures = SUMX(
+    InwonerGroupsSummarized, 
+    [TotaleUitgaven]
+)
+
+VAR NumberOfGemeenten = DISTINCTCOUNT('gemeenten'[Gemeentecode])
+
+RETURN 
+IF(
+    NumberOfGemeenten > 0, 
+    TotalExpenditures / NumberOfGemeenten
+)
+
+--- MeasureTable | Avg Bedrag per Inwonersgroep Baat pi | stand_vd_gemeenten
+VAR InwonerGroupsSummarized = SUMMARIZE(
+    'gemeenten', 
+    'gemeenten'[Inwonergroep], 
+    "TotaleUitgaven", [Totale Uitgaven pi Baat] // This captures the total expenditures measure for each Inwonergroep
+)
+
+VAR TotalExpenditures = SUMX(
+    InwonerGroupsSummarized, 
+    [TotaleUitgaven]
+)
+
+VAR NumberOfGemeenten = DISTINCTCOUNT('gemeenten'[Gemeentecode])
+
+RETURN 
+IF(
+    NumberOfGemeenten > 0, 
+    TotalExpenditures / NumberOfGemeenten
+)
+
+--- MeasureTable | Gemiddeld Overschot of Tekort per Inwoner | stand_vd_gemeenten
+DIVIDE(([Avg Bedrag per Inwonersgroep Baat pi] - [Avg Bedrag per Inwonersgroep Last pi]), 
+([Avg Bedrag per Inwonersgroep Baat pi] + [Avg Bedrag per Inwonersgroep Last pi]), 0)
+
+--- MeasureTable | Index Avg Bedrag per Inwonersgroep | stand_vd_gemeenten
+VAR BaseYearValue = CALCULATE(
+    [Avg Bedrag per Inwonersgroep],
+    YEAR('CalendarTable'[Date]) = 2018
+)
+VAR CurrentYearValue = [Avg Bedrag per Inwonersgroep]
+VAR IndexValue = DIVIDE(CurrentYearValue, BaseYearValue) * 100
+RETURN IndexValue
+
+--- MeasureTable | Totale uitgaven pi
+CALCULATE(
+    SUM(begrotingen_jaarrekeningen[bedrag_per_inwoner])
+)
+
+--- MeasureTable | Totale Uitgaven pi Baat
+CALCULATE(
+SUM(begrotingen_jaarrekeningen[bedrag_per_inwoner]),
+categorieen[baat/last] = "baat"
+)
+
+--- MeasureTable | Totale Uitgaven pi Last
+CALCULATE(
+SUM(begrotingen_jaarrekeningen[bedrag_per_inwoner]),
+categorieen[baat/last] = "last"
+)
+
+--- MeasureTable | Avg Bedrag Per Gemeente pi | Averages\pi
+VAR GemeentenaamSummarized = 
+    SUMMARIZE(
+        FILTER(
+            gemeenten, 
+            NOT(ISBLANK([Totale uitgaven pi]))
+        ), 
+        gemeenten[Gemeentenaam], 
+        "TotaleUitgaven", [Totale uitgaven pi]
+    )
+
+VAR TotalExpenditures = 
+    SUMX(
+        GemeentenaamSummarized, 
+        [TotaleUitgaven]
+    )
+
+VAR NumberOfGemeenten = 
+    COUNTROWS(GemeentenaamSummarized)
+
+RETURN 
+IF(
+    NumberOfGemeenten > 0, 
+    TotalExpenditures / NumberOfGemeenten,
+    BLANK()
+)
+
+--- MeasureTable | Avg Bedrag Per Gemeente pi - referentie vs selectie | Averages\pi
+VAR AVGbedragGemeente =
+    CALCULATE(
+        [Avg Bedrag Per Gemeente pi],
+        ALL( gemeenten ),
+        GemeenteInclReferentie[Gemeentenaam] IN ALLSELECTED( dtGemeenten[Gemeentenaam] ),
+        gemeenten[Provincienaam] IN ALLSELECTED(dtGemeenten[Provincienaam]),
+        gemeenten[Inwonergroep] IN ALLSELECTED(dtGemeenten[Inwonergroep])
+    )
+
+VAR Result = 
+IF(
+    SELECTEDVALUE( GemeenteInclReferentie[Gemeentenaam] ) = "Referentiegroep",
+    AVGbedragGemeente,
+    [Avg Bedrag Per Gemeente pi]
+)
+RETURN
+Result
+
+--- MeasureTable | som_bedrag | other
+SUM(begrotingen_jaarrekeningen[bedrag_per_inwoner])
+
+--- MeasureTable | Avg Solvabiliteit Per Gemeente | Averages\pi
+VAR GemeentenaamSummarized = 
+    SUMMARIZE(
+        gemeenten, 
+        gemeenten[Gemeentenaam], 
+        "TotaleSolvabiliteit", [Solvabiliteit]
+    )
+
+VAR TotalSolvabiliteit = 
+    SUMX(
+        GemeentenaamSummarized, 
+        [TotaleSolvabiliteit]
+    )
+
+VAR NumberOfGemeenten = 
+    COUNTROWS(GemeentenaamSummarized)
+
+RETURN 
+IF(
+    NumberOfGemeenten > 0, 
+    TotalSolvabiliteit / NumberOfGemeenten,
+    BLANK()
+)
+
+--- MeasureTable | Avg Solvabiliteit Per Gemeente pi - referentie vs selectie | Averages\pi
+VAR AVGbedragGemeente =
+    CALCULATE(
+        [Avg Solvabiliteit Per Gemeente],
+        ALL( gemeenten ),
+        GemeenteInclReferentie[Gemeentenaam] IN ALLSELECTED( dtGemeenten[Gemeentenaam] ),
+        gemeenten[Provincienaam] IN ALLSELECTED(dtGemeenten[Provincienaam]),
+        gemeenten[Inwonergroep] IN ALLSELECTED(dtGemeenten[Inwonergroep])
+    )
+
+VAR Result = 
+IF(
+    SELECTEDVALUE( GemeenteInclReferentie[Gemeentenaam] ) = "Referentiegroep",
+    AVGbedragGemeente,
+    [Avg Solvabiliteit Per Gemeente]
+)
+RETURN
+Result
+
+--- MeasureTable | Avg Bedrag Per Gemeente pi baten | Averages\pi
+VAR GemeentenaamSummarized = 
+    SUMMARIZE(
+        gemeenten, 
+        gemeenten[Gemeentenaam], 
+        "TotaleUitgaven", [Totale Uitgaven pi Baat]
+    )
+
+VAR TotalExpenditures = 
+    SUMX(
+        GemeentenaamSummarized, 
+        [TotaleUitgaven]
+    )
+
+VAR NumberOfGemeenten = 
+    COUNTROWS(GemeentenaamSummarized)
+
+RETURN 
+IF(
+    NumberOfGemeenten > 0, 
+    TotalExpenditures / NumberOfGemeenten,
+    BLANK()
+)
+
+--- MeasureTable | Avg Bedrag Per Gemeente pi baten - referentie vs selectie | Averages\pi
+VAR AVGbedragGemeente =
+    CALCULATE(
+        [Avg Bedrag Per Gemeente pi baten],
+        ALL( gemeenten ),
+        GemeenteInclReferentie[Gemeentenaam] IN ALLSELECTED( dtGemeenten[Gemeentenaam] ),
+        gemeenten[Provincienaam] IN ALLSELECTED(dtGemeenten[Provincienaam]),
+        gemeenten[Inwonergroep] IN ALLSELECTED(dtGemeenten[Inwonergroep])
+    )
+
+VAR Result = 
+IF(
+    SELECTEDVALUE( GemeenteInclReferentie[Gemeentenaam] ) = "Referentiegroep",
+    AVGbedragGemeente,
+    [Avg Bedrag Per Gemeente pi baten]
+)
+RETURN
+Result
+
+--- MeasureTable | Avg Bedrag Per Gemeente pi lasten | Averages\pi
+VAR GemeentenaamSummarized = 
+    SUMMARIZE(
+        gemeenten, 
+        gemeenten[Gemeentenaam], 
+        "TotaleUitgaven", [Totale Uitgaven pi Last]
+    )
+
+VAR TotalExpenditures = 
+    SUMX(
+        GemeentenaamSummarized, 
+        [TotaleUitgaven]
+    )
+
+VAR NumberOfGemeenten = 
+    COUNTROWS(GemeentenaamSummarized)
+
+RETURN 
+IF(
+    NumberOfGemeenten > 0, 
+    TotalExpenditures / NumberOfGemeenten,
+    BLANK()
+)
+
+--- MeasureTable | Avg Bedrag Per Gemeente pi lasten - referentie vs selectie | Averages\pi
+VAR AVGbedragGemeente =
+    CALCULATE(
+        [Avg Bedrag Per Gemeente pi lasten],
+        ALL( gemeenten ),
+        GemeenteInclReferentie[Gemeentenaam] IN ALLSELECTED( dtGemeenten[Gemeentenaam] ),
+        gemeenten[Provincienaam] IN ALLSELECTED(dtGemeenten[Provincienaam]),
+        gemeenten[Inwonergroep] IN ALLSELECTED(dtGemeenten[Inwonergroep])
+    )
+
+VAR Result = 
+IF(
+    SELECTEDVALUE( GemeenteInclReferentie[Gemeentenaam] ) = "Referentiegroep",
+    AVGbedragGemeente,
+    [Avg Bedrag Per Gemeente pi lasten]
+)
+RETURN
+Result
+
+--- MeasureTable | Avg Resultaat Per Gemeente pi | Averages\pi
+[Avg Bedrag Per Gemeente pi baten - referentie vs selectie] - [Avg Bedrag Per Gemeente pi lasten - referentie vs selectie]
+
+--- MeasureTable | Totale uitgaven
+CALCULATE(
+    SUM(begrotingen_jaarrekeningen[bedrag])
+)
+
+--- MeasureTable | Totale Uitgaven Baat
+CALCULATE(
+SUM(begrotingen_jaarrekeningen[bedrag]),
+categorieen[baat/last] = "baat"
+)
+
+--- MeasureTable | Totale Uitgaven Last
+CALCULATE(
+SUM(begrotingen_jaarrekeningen[bedrag]),
+categorieen[baat/last] = "last"
+)
+
+--- MeasureTable | Avg Bedrag Per Gemeente | Averages\absoluut
+VAR GemeentenaamSummarized = 
+    SUMMARIZE(
+        gemeenten,
+        gemeenten[Gemeentenaam], 
+        "TotaleUitgaven", [Totale uitgaven]
+    )
+
+VAR TotalExpenditures = 
+    SUMX(
+        GemeentenaamSummarized, 
+        [TotaleUitgaven]
+    )
+
+VAR NumberOfGemeenten = 
+    COUNTROWS(GemeentenaamSummarized)
+
+RETURN 
+IF(
+    NumberOfGemeenten > 0, 
+    TotalExpenditures / NumberOfGemeenten,
+    BLANK()
+)
+
+--- MeasureTable | Avg Bedrag Per Gemeente - referentie vs selectie | Averages\absoluut
+VAR AVGbedragGemeente =
+    CALCULATE(
+        [Avg Bedrag Per Gemeente],
+        ALL( gemeenten ),
+        GemeenteInclReferentie[Gemeentenaam] IN ALLSELECTED( dtGemeenten[Gemeentenaam] ),
+        gemeenten[Provincienaam] IN ALLSELECTED(dtGemeenten[Provincienaam]),
+        gemeenten[Inwonergroep] IN ALLSELECTED(dtGemeenten[Inwonergroep])
+    )
+
+VAR Result = 
+IF(
+    SELECTEDVALUE( GemeenteInclReferentie[Gemeentenaam] ) = "Referentiegroep",
+    AVGbedragGemeente,
+    [Avg Bedrag Per Gemeente]
+)
+RETURN
+Result
+
+--- MeasureTable | Avg Bedrag Per Gemeente baten | Averages\absoluut
+VAR GemeentenaamSummarized = 
+    SUMMARIZE(
+        gemeenten,
+        gemeenten[Gemeentenaam], 
+        "TotaleUitgaven", [Totale Uitgaven Baat]
+    )
+
+VAR TotalExpenditures = 
+    SUMX(
+        GemeentenaamSummarized, 
+        [TotaleUitgaven]
+    )
+
+VAR NumberOfGemeenten = 
+    COUNTROWS(GemeentenaamSummarized)
+
+RETURN 
+IF(
+    NumberOfGemeenten > 0, 
+    TotalExpenditures / NumberOfGemeenten,
+    BLANK()
+)
+
+--- MeasureTable | Avg Bedrag Per Gemeente baten - referentie vs selectie | Averages\absoluut
+VAR AVGbedragGemeente =
+    CALCULATE(
+        [Avg Bedrag Per Gemeente baten],
+        ALL( gemeenten ),
+        GemeenteInclReferentie[Gemeentenaam] IN ALLSELECTED( dtGemeenten[Gemeentenaam] ),
+        gemeenten[Provincienaam] IN ALLSELECTED(dtGemeenten[Provincienaam]),
+        gemeenten[Inwonergroep] IN ALLSELECTED(dtGemeenten[Inwonergroep])
+    )
+
+VAR Result = 
+IF(
+    SELECTEDVALUE( GemeenteInclReferentie[Gemeentenaam] ) = "Referentiegroep",
+    AVGbedragGemeente,
+    [Avg Bedrag Per Gemeente baten]
+)
+RETURN
+Result
+
+--- MeasureTable | Avg Bedrag Per Gemeente lasten | Averages\absoluut
+VAR GemeentenaamSummarized = 
+    SUMMARIZE(
+        gemeenten,
+        gemeenten[Gemeentenaam], 
+        "TotaleUitgaven", [Totale Uitgaven Last]
+    )
+
+VAR TotalExpenditures = 
+    SUMX(
+        GemeentenaamSummarized, 
+        [TotaleUitgaven]
+    )
+
+VAR NumberOfGemeenten = 
+    COUNTROWS(GemeentenaamSummarized)
+
+RETURN 
+IF(
+    NumberOfGemeenten > 0, 
+    TotalExpenditures / NumberOfGemeenten,
+    BLANK()
+)
+
+--- MeasureTable | Avg Bedrag Per Gemeente lasten - referentie vs selectie | Averages\absoluut
+VAR AVGbedragGemeente =
+    CALCULATE(
+        [Avg Bedrag Per Gemeente lasten],
+        ALL( gemeenten ),
+        GemeenteInclReferentie[Gemeentenaam] IN ALLSELECTED( dtGemeenten[Gemeentenaam] ),
+        gemeenten[Provincienaam] IN ALLSELECTED(dtGemeenten[Provincienaam]),
+        gemeenten[Inwonergroep] IN ALLSELECTED(dtGemeenten[Inwonergroep])
+    )
+
+VAR Result = 
+IF(
+    SELECTEDVALUE( GemeenteInclReferentie[Gemeentenaam] ) = "Referentiegroep",
+    AVGbedragGemeente,
+    [Avg Bedrag Per Gemeente lasten]
+)
+RETURN
+Result
+
+--- MeasureTable | Avg Resultaat Per Gemeente | Averages\absoluut
+[Avg Bedrag Per Gemeente baten - referentie vs selectie] - [Avg Bedrag Per Gemeente lasten - referentie vs selectie]
+
+--- MeasureTable | Index Avg Bedrag per Inwonersgroep <25k | stand_vd_gemeenten
+VAR BaseYearValue = CALCULATE(
+    [Avg Bedrag Per Gemeente],
+    YEAR('CalendarTable'[Date]) = 2018,
+    gemeenten[Inwonergroep] = "<25k"
+)
+VAR CurrentYearValue = CALCULATE(
+    [Avg Bedrag Per Gemeente],
+    gemeenten[Inwonergroep] = "<25k"
+)
+VAR IndexValue = DIVIDE(CurrentYearValue, BaseYearValue) * 100
+RETURN IndexValue
+
+--- MeasureTable | Index Avg Bedrag per Inwonersgroep 25-50K | stand_vd_gemeenten
+VAR BaseYearValue = CALCULATE(
+    [Avg Bedrag Per Gemeente],
+    YEAR('CalendarTable'[Date]) = 2018,
+    gemeenten[Inwonergroep] = "25k - 50k"
+)
+VAR CurrentYearValue = CALCULATE(
+    [Avg Bedrag Per Gemeente],
+    gemeenten[Inwonergroep] = "25k - 50k"
+)
+VAR IndexValue = DIVIDE(CurrentYearValue, BaseYearValue) * 100
+RETURN IndexValue
+
+--- MeasureTable | Index Avg Bedrag per Inwonersgroep 50-100K | stand_vd_gemeenten
+VAR BaseYearValue = CALCULATE(
+    [Avg Bedrag Per Gemeente],
+    YEAR('CalendarTable'[Date]) = 2018,
+    gemeenten[Inwonergroep] = "50k - 100k"
+)
+VAR CurrentYearValue = CALCULATE(
+    [Avg Bedrag Per Gemeente],
+    gemeenten[Inwonergroep] = "50k - 100k"
+)
+VAR IndexValue = DIVIDE(CurrentYearValue, BaseYearValue) * 100
+RETURN IndexValue
+
+--- MeasureTable | Index Avg Bedrag per Inwonersgroep 100K+ | stand_vd_gemeenten
+VAR BaseYearValue = CALCULATE(
+    [Avg Bedrag Per Gemeente],
+    YEAR('CalendarTable'[Date]) = 2018,
+    gemeenten[Inwonergroep] = ">100k"
+)
+VAR CurrentYearValue = CALCULATE(
+    [Avg Bedrag Per Gemeente],
+    gemeenten[Inwonergroep] = ">100k"
+)
+VAR IndexValue = DIVIDE(CurrentYearValue, BaseYearValue) * 100
+RETURN IndexValue
+
+--- MeasureTable | Index Avg Bedrag per Inwonersgroep G4 | stand_vd_gemeenten
+VAR BaseYearValue = CALCULATE(
+    [Avg Bedrag Per Gemeente],
+    YEAR('CalendarTable'[Date]) = 2018,
+    gemeenten[Inwonergroep] = "G4"
+)
+VAR CurrentYearValue = CALCULATE(
+    [Avg Bedrag Per Gemeente],
+    gemeenten[Inwonergroep] = "G4"
+)
+VAR IndexValue = DIVIDE(CurrentYearValue, BaseYearValue) * 100
+RETURN IndexValue
+
+--- MeasureTable | Referentiegroep aantal | counts
+CALCULATE(
+    COUNTROWS(dtGemeenten)
+)
+
+--- MeasureTable | Referentiegroep aantal txt | counts
+"Referentiegroep (" & [Referentiegroep aantal] & ")"
+
+================================================================================
+CALCULATED COLUMNS  (48)
+================================================================================
+
+--- DateTableTemplate_73a9ffc0-7729-4677-a11d-e50016e462ef | Jaar
+YEAR([Date])
+
+--- DateTableTemplate_73a9ffc0-7729-4677-a11d-e50016e462ef | MonthNo
+MONTH([Date])
+
+--- DateTableTemplate_73a9ffc0-7729-4677-a11d-e50016e462ef | Maand
+FORMAT([Date], "MMMM")
+
+--- DateTableTemplate_73a9ffc0-7729-4677-a11d-e50016e462ef | QuarterNo
+INT(([MonthNo] + 2) / 3)
+
+--- DateTableTemplate_73a9ffc0-7729-4677-a11d-e50016e462ef | Kwartaal
+"Kwartaal " & [QuarterNo]
+
+--- DateTableTemplate_73a9ffc0-7729-4677-a11d-e50016e462ef | Dag
+DAY([Date])
+
+--- gemeenten | Inwonergroep
+IF(
+    NOT(ISBLANK(gemeenten[Inwoneraantal])),
+    SWITCH(
+        TRUE(),
+        gemeenten[Inwoneraantal] < 25000, "<25k",
+        gemeenten[Inwoneraantal] <= 50000, "25k - 50k",
+        gemeenten[Inwoneraantal] <= 100000, "50k - 100k",
+        gemeenten[Inwoneraantal] <= 300000, ">100k",
+        "G4"
+    )
+)
+
+--- gemeenten | inwonergroep_order
+IF(
+    NOT(ISBLANK(gemeenten[Inwoneraantal])),
+    SWITCH(
+        TRUE(),
+        gemeenten[Inwoneraantal] < 25000, "1",
+        gemeenten[Inwoneraantal] <= 50000, "2",
+        gemeenten[Inwoneraantal] <= 100000, "3",
+        gemeenten[Inwoneraantal] <= 300000, "4",
+        "5"
+    )
+)
+
+--- categorieen | baat/last
+SWITCH(
+	TRUE,
+	ISBLANK('categorieen'[Description_categorie]),
+	"(Leeg)",
+	'categorieen'[Description_categorie] IN {"Baten - 2.2.1 - Belastingen op producenten",
+		"Baten - 2.2.2 - Belastingen op huishoudens",
+		"Baten - 3.1 - Grond",
+		"Baten - 3.2 - Duurzame goederen",
+		"Baten - 3.3 - Pachten",
+		"Baten - 3.4.2 - Eigen bijdragen en verhaal sociale uitkeringen in natura",
+		"Baten - 3.5.2 - Uitgeleend personeel",
+		"Baten - 3.6 - Huren",
+		"Baten - 3.7 - Leges en andere rechten",
+		"Baten - 3.8 - Overige goederen en diensten",
+		"Baten - 4.1.2 - Verhaal sociale uitkeringen in geld",
+		"Baten - 4.3.1 - Inkomensoverdrachten - Rijk",
+		"Baten - 4.3.2 - Inkomensoverdrachten - gemeenten",
+		"Baten - 4.3.3 - Inkomensoverdrachten - gemeenschappelijke regelingen",
+		"Baten - 4.3.4 - Inkomensoverdrachten - provincies",
+		"Baten - 4.3.5 - Inkomensoverdrachten - waterschappen",
+		"Baten - 4.3.6 - Inkomensoverdrachten - overige overheden",
+		"Baten - 4.3.7 - Inkomensoverdrachten - Europese Unie",
+		"Baten - 4.3.8 - Inkomensoverdrachten - overige instellingen en personen",
+		"Baten - 4.3.9 - Inkomensoverdrachten - onverdeeld",
+		"Baten - 4.4.1 - Kapitaaloverdrachten - Rijk",
+		"Baten - 4.4.2 - Kapitaaloverdrachten - gemeenten",
+		"Baten - 4.4.3 - Kapitaaloverdrachten - gemeenschappelijke regelingen",
+		"Baten - 4.4.4 - Kapitaaloverdrachten - provincies",
+		"Baten - 4.4.5 - Kapitaaloverdrachten - waterschappen",
+		"Baten - 4.4.6 - Kapitaaloverdrachten - overige overheden",
+		"Baten - 4.4.7 - Kapitaaloverdrachten - Europese Unie",
+		"Baten - 4.4.8 - Kapitaaloverdrachten - overige instellingen en personen",
+		"Baten - 4.4.9 - Kapitaaloverdrachten - onverdeeld",
+		"Baten - 5.1 - Rente",
+		"Baten - 5.2 - Dividenden en winsten",
+		"Baten - 6.1 - Financiële transacties",
+		"Baten - 7.1 - Mutatie reserves",
+		"Baten - 7.2 - Mutatie voorzieningen",
+		"Baten - 7.3 - Afschrijvingen",
+		"Baten - 7.4 - Toegerekende reële en bespaarde rente",
+		"Baten - 7.5 - Overige verrekeningen"},
+	"Baat",
+	'categorieen'[Description_categorie] IN {"Lasten - 1.1 - Salarissen en sociale lasten",
+		"Lasten - 2.1 - Belastingen",
+		"Lasten - 3.1 - Grond",
+		"Lasten - 3.2 - Duurzame goederen",
+		"Lasten - 3.3 - Pachten",
+		"Lasten - 3.4.1 - Sociale uitkeringen in natura",
+		"Lasten - 3.5.1 - Ingeleend personeel",
+		"Lasten - 3.8 - Overige goederen en diensten",
+		"Lasten - 4.1.1 - Sociale uitkeringen in geld",
+		"Lasten - 4.2 - Subsidies",
+		"Lasten - 4.3.1 - Inkomensoverdrachten - Rijk",
+		"Lasten - 4.3.2 - Inkomensoverdrachten - gemeenten",
+		"Lasten - 4.3.3 - Inkomensoverdrachten - gemeenschappelijke regelingen",
+		"Lasten - 4.3.4 - Inkomensoverdrachten - provincies",
+		"Lasten - 4.3.5 - Inkomensoverdrachten - waterschappen",
+		"Lasten - 4.3.6 - Inkomensoverdrachten - overige overheden",
+		"Lasten - 4.3.7 - Inkomensoverdrachten - Europese Unie",
+		"Lasten - 4.3.8 - Inkomensoverdrachten - overige instellingen en personen",
+		"Lasten - 4.3.9 - Inkomensoverdrachten - onverdeeld",
+		"Lasten - 4.4.1 - Kapitaaloverdrachten - Rijk",
+		"Lasten - 4.4.2 - Kapitaaloverdrachten - gemeenten",
+		"Lasten - 4.4.3 - Kapitaaloverdrachten - gemeenschappelijke regelingen",
+		"Lasten - 4.4.4 - Kapitaaloverdrachten - provincies",
+		"Lasten - 4.4.5 - Kapitaaloverdrachten - waterschappen",
+		"Lasten - 4.4.6 - Kapitaaloverdrachten - overige overheden",
+		"Lasten - 4.4.7 - Kapitaaloverdrachten - Europese Unie",
+		"Lasten - 4.4.8 - Kapitaaloverdrachten - overige instellingen en personen",
+		"Lasten - 4.4.9 - Kapitaaloverdrachten - onverdeeld",
+		"Lasten - 5.1 - Rente",
+		"Lasten - 6.1 - Financiële transacties",
+		"Lasten - 7.1 - Mutatie reserves",
+		"Lasten - 7.2 - Mutatie voorzieningen",
+		"Lasten - 7.3 - Afschrijvingen",
+		"Lasten - 7.4 - Toegerekende reële en bespaarde rente",
+		"Lasten - 7.5 - Overige verrekeningen"},
+	"Last",
+	"Overige"
+)
+
+--- categorieen | baten
+SWITCH(
+	TRUE,
+	ISBLANK('categorieen'[Description_categorie]),
+	"(Leeg)",
+	'categorieen'[Description_categorie] IN {"Baten - 2.2.1 - Belastingen op producenten",
+		"Baten - 2.2.2 - Belastingen op huishoudens",
+		"Baten - 3.1 - Grond",
+		"Baten - 3.2 - Duurzame goederen",
+		"Baten - 3.3 - Pachten",
+		"Baten - 3.4.2 - Eigen bijdragen en verhaal sociale uitkeringen in natura",
+		"Baten - 3.5.2 - Uitgeleend personeel",
+		"Baten - 3.6 - Huren",
+		"Baten - 3.7 - Leges en andere rechten",
+		"Baten - 3.8 - Overige goederen en diensten",
+		"Baten - 5.1 - Rente",
+		"Baten - 5.2 - Dividenden en winsten",
+		"Baten - 6.1 - Financiële transacties",
+		"Baten - 7.1 - Mutatie reserves",
+		"Baten - 7.2 - Mutatie voorzieningen",
+		"Baten - 7.3 - Afschrijvingen",
+		"Baten - 7.4 - Toegerekende reële en bespaarde rente",
+		"Baten - 7.5 - Overige verrekeningen"},
+	"Eigen inkomsten",
+	'categorieen'[Description_categorie] IN {"Baten - 4.1.2 - Verhaal sociale uitkeringen in geld",
+		"Baten - 4.3.1 - Inkomensoverdrachten - Rijk",
+		"Baten - 4.3.2 - Inkomensoverdrachten - gemeenten",
+		"Baten - 4.3.3 - Inkomensoverdrachten - gemeenschappelijke regelingen",
+		"Baten - 4.3.4 - Inkomensoverdrachten - provincies",
+		"Baten - 4.3.5 - Inkomensoverdrachten - waterschappen",
+		"Baten - 4.3.6 - Inkomensoverdrachten - overige overheden",
+		"Baten - 4.3.7 - Inkomensoverdrachten - Europese Unie",
+		"Baten - 4.3.8 - Inkomensoverdrachten - overige instellingen en personen",
+		"Baten - 4.3.9 - Inkomensoverdrachten - onverdeeld",
+		"Baten - 4.4.1 - Kapitaaloverdrachten - Rijk",
+		"Baten - 4.4.2 - Kapitaaloverdrachten - gemeenten",
+		"Baten - 4.4.3 - Kapitaaloverdrachten - gemeenschappelijke regelingen",
+		"Baten - 4.4.4 - Kapitaaloverdrachten - provincies",
+		"Baten - 4.4.5 - Kapitaaloverdrachten - waterschappen",
+		"Baten - 4.4.6 - Kapitaaloverdrachten - overige overheden",
+		"Baten - 4.4.7 - Kapitaaloverdrachten - Europese Unie",
+		"Baten - 4.4.8 - Kapitaaloverdrachten - overige instellingen en personen",
+		"Baten - 4.4.9 - Kapitaaloverdrachten - onverdeeld"},
+	"Overdrachten",
+	'categorieen'[Description_categorie]
+)
+
+--- categorieen | hoofdcategorie
+SWITCH(
+	TRUE,
+	ISBLANK('categorieen'[Title_categorie]),
+	"(Leeg)",
+	'categorieen'[Title_categorie] IN {"L1.1 Salarissen en sociale lasten"},
+	"1.0 - Salarissen en sociale lasten",
+	'categorieen'[Title_categorie] IN {"B2.2.1 Belastingen op producenten",
+		"B2.2.2 Belastingen op huishoudens",
+		"L2.1 Belastingen"},
+	"2.0 - Belastingen",
+	'categorieen'[Title_categorie] IN {"B3.1 Grond",
+		"B3.2 Duurzame goederen",
+		"B3.3 Pachten",
+		"B3.4.2 Eigen bijdragen en verhaal soci..",
+		"B3.5.2 Uitgeleend personeel",
+		"B3.6 Huren",
+		"B3.7 Leges en andere rechten",
+		"B3.8 Overige goederen en diensten",
+		"L3.1 Grond",
+		"L3.2 Duurzame goederen",
+		"L3.3 Pachten",
+		"L3.4.1 Sociale uitkeringen in natura",
+		"L3.5.1 Ingeleend personeel",
+		"L3.8 Overige goederen en diensten"},
+	"3.0 - Goederen en diensten",
+	'categorieen'[Title_categorie] IN {"B4.1.2 Verhaal sociale uitkeringen in ..",
+		"B4.3.1 Inkomensoverdrachten - Rijk",
+		"B4.3.2 Inkomensoverdrachten - gemeenten",
+		"B4.3.3 Inkomensoverdrachten - gemeensc..",
+		"B4.3.4 Inkomensoverdrachten - provincies",
+		"B4.3.5 Inkomensoverdrachten - watersch..",
+		"B4.3.6 Inkomensoverdrachten - ov overh..",
+		"B4.3.7 Inkomensoverdrachten - Europese..",
+		"B4.3.8 Inkomensoverdrachten - overige ..",
+		"B4.3.9 Inkomensoverdrachten - onverdeeld",
+		"B4.4.1 Kapitaaloverdrachten - Rijk",
+		"B4.4.2 Kapitaaloverdrachten - gemeenten",
+		"B4.4.3 Kapitaaloverdrachten - gemeensc..",
+		"B4.4.4 Kapitaaloverdrachten - provincies",
+		"B4.4.5 Kapitaaloverdrachten - watersch..",
+		"B4.4.6 Kapitaaloverdrachten - ov overh..",
+		"B4.4.7 Kapitaaloverdrachten - Europese..",
+		"B4.4.8 Kapitaaloverdrachten - overige ..",
+		"B4.4.9 Kapitaaloverdrachten - onverdeeld",
+		"L4.1.1 Sociale uitkeringen in geld",
+		"L4.2 Subsidies",
+		"L4.3.1 Inkomensoverdrachten - Rijk",
+		"L4.3.2 Inkomensoverdrachten - gemeenten",
+		"L4.3.3 Inkomensoverdrachten - gemeensc..",
+		"L4.3.4 Inkomensoverdrachten - provincies",
+		"L4.3.5 Inkomensoverdrachten - watersch..",
+		"L4.3.6 Inkomensoverdrachten - ov overh..",
+		"L4.3.7 Inkomensoverdrachten - Europese..",
+		"L4.3.8 Inkomensoverdrachten - overige ..",
+		"L4.3.9 Inkomensoverdrachten - onverdeeld",
+		"L4.4.1 Kapitaaloverdrachten - Rijk",
+		"L4.4.2 Kapitaaloverdrachten - gemeenten",
+		"L4.4.3 Kapitaaloverdrachten - gemeensc..",
+		"L4.4.4 Kapitaaloverdrachten - provincies",
+		"L4.4.5 Kapitaaloverdrachten - watersch..",
+		"L4.4.6 Kapitaaloverdrachten - ov overh..",
+		"L4.4.7 Kapitaaloverdrachten - Europese..",
+		"L4.4.8 Kapitaaloverdrachten - overige ..",
+		"L4.4.9 Kapitaaloverdrachten - onverdeeld"},
+	"4.0 - Overdrachten",
+	'categorieen'[Title_categorie] IN {"B5.1 Rente",
+		"B5.2 Dividenden en winsten",
+		"L5.1 Rente"},
+	"5.0 - Rente en dividend",
+	'categorieen'[Title_categorie] IN {"B6.1 Financiële transacties",
+		"L6.1 Financiële transacties"},
+	"6.0 - Financiële transacties",
+	'categorieen'[Title_categorie] IN {"B7.1 Mutatie reserves",
+		"B7.2 Mutatie voorzieningen",
+		"B7.3 Afschrijvingen",
+		"B7.4 Toegerekende reële en bespaarde r..",
+		"B7.5 Overige verrekeningen",
+		"L7.1 Mutatie reserves",
+		"L7.2 Mutatie voorzieningen",
+		"L7.3 Afschrijvingen",
+		"L7.4 Toegerekende reële en bespaarde r..",
+		"L7.5 Overige verrekeningen"},
+	"7.0 - Verrekeningen",
+	'categorieen'[Title_categorie] IN {"Primo",
+		"Ultimo"},
+	"Balansstanden",
+	'categorieen'[Title_categorie]
+)
+
+--- taakvelden | hoofdtaakveld
+SWITCH(
+	TRUE,
+	ISBLANK('taakvelden'[Title_taakveld]),
+	"(Leeg)",
+	'taakvelden'[Title_taakveld] IN {"0.1 Bestuur",
+		"0.10 Mutaties reserves",
+		"0.11 Resultaat van de rekening van bat..",
+		"0.2 Burgerzaken",
+		"0.3 Beheer overige gebouwen en gronden",
+		"0.4 Overhead",
+		"0.5 Treasury",
+		"0.61 OZB woningen",
+		"0.62 OZB niet-woningen",
+		"0.63 Parkeerbelasting",
+		"0.64 Belastingen overig",
+		"0.7 Algemene uitkeringen en overige ui..",
+		"0.8 Overige baten en lasten",
+		"0.9 Vennootschapsbelasting"},
+	"0.0 - Bestuur en ondersteuning",
+	'taakvelden'[Title_taakveld] IN {"1.1 Crisisbeheersing en brandweer",
+		"1.2 Openbare orde en veiligheid"},
+	"1.0 - Veiligheid",
+	'taakvelden'[Title_taakveld] IN {"2.1 Verkeer en vervoer",
+		"2.2 Parkeren",
+		"2.3 Recreatieve havens",
+		"2.4 Economische havens en waterwegen",
+		"2.5 Openbaar vervoer"},
+	"2.0 - Verkeer, vervoer en waterstaat",
+	'taakvelden'[Title_taakveld] IN {"3.1 Economische ontwikkeling",
+		"3.2 Fysieke bedrijfsinfrastructuur",
+		"3.3 Bedrijvenloket en bedrijfsregelingen",
+		"3.4 Economische promotie"},
+	"3.0 - Economie",
+	'taakvelden'[Title_taakveld] IN {"4.1 Openbaar basisonderwijs",
+		"4.2 Onderwijshuisvesting",
+		"4.3 Onderwijsbeleid en leerlingzaken"},
+	"4.0 - Onderwijs",
+	'taakvelden'[Title_taakveld] IN {"5.1 Sportbeleid en activering",
+		"5.2 Sportaccommodaties",
+		"5.3 Cultuurpresentatie, cultuurproduct..",
+		"5.4 Musea",
+		"5.5 Cultureel erfgoed",
+		"5.6 Media",
+		"5.7 Openbaar groen en (openlucht) recr.."},
+	"5.0 - Sport, cultuur en recreatie",
+	'taakvelden'[Title_taakveld] IN {"6.1 Samenkracht en burgerparticipatie",
+		"6.2 Wijkteams",
+		"6.3 Inkomensregelingen",
+		"6.4 Begeleide participatie",
+		"6.5 Arbeidsparticipatie",
+		"6.6 Maatwerkvoorziening (WMO)",
+		"6.71 Maatwerkdienstverlening 18+",
+		"6.71a Huishoudelijke hulp (WMO)",
+		"6.71b Begeleiding (WMO)",
+		"6.71c Dagbesteding (WMO)",
+		"6.71d Overige maatwerkarrangementen ..",
+		"6.72 Maatwerkdienstverlening 18-",
+		"6.72a Jeugdhulp begeleiding",
+		"6.72b Jeugdhulp behandeling",
+		"6.72c Jeugdhulp dagbesteding",
+		"6.72d Jeugdhulp zonder verblijf overig",
+		"6.73a Pleegzorg",
+		"6.73b Gezinsgericht",
+		"6.73c Jeugdhulp met verblijf overig",
+		"6.74a Jeugd behandeling GGZ zonder ..",
+		"6.74b Jeugdhulp crisis/LTA/GGZ-verblijf",
+		"6.74c Gesloten plaatsing",
+		"6.81 Geëscaleerde zorg 18+",
+		"6.81a Beschermd wonen (WMO)",
+		"6.81b Maatschappelijke- en vrouwenopvang",
+		"6.82 Geëscaleerde zorg 18-",
+		"6.82a Jeugdbescherming",
+		"6.82b Jeugdreclassering"},
+	"6.0 - Sociaal domein",
+	'taakvelden'[Title_taakveld] IN {"7.1 Volksgezondheid",
+		"7.2 Riolering",
+		"7.3 Afval",
+		"7.4 Milieubeheer",
+		"7.5 Begraafplaatsen en crematoria"},
+	"7.0 - Volksgezondheid en milieu",
+	'taakvelden'[Title_taakveld] IN {"8.1 Ruimte en leefomgeving",
+		"8.2 Grondexploitatie (niet-bedrijvente..",
+		"8.3 Wonen en bouwen"},
+	"8.0 - Volkshuisvesting, leefomgeving en stedelijke vernieuwing",
+	'taakvelden'[Title_taakveld] IN {"A111 Kosten verbonden aan sluiten geld..",
+		"A112 Kosten onderzoek en ontwikkeling ..",
+		"A113 Bijdragen aan activa in eigendom ..",
+		"A121 Gronden en terreinen",
+		"A122 Woonruimten",
+		"A123 Bedrijfsgebouwen",
+		"A124 Grond-, weg- en waterbouwkundige ..",
+		"A125 Vervoermiddelen",
+		"A126 Machines, apparaten en installaties",
+		"A129 Overig",
+		"A1311 Kapitaalverstrekking aan deelnem..",
+		"A1312 Kapitaalverstrekking aan gemeens..",
+		"A1313 Kapitaalverstrekking aan overige..",
+		"A1321 Leningen aan woningbouwcorporaties",
+		"A1322 Leningen aan deelnemingen",
+		"A1323 Leningen aan overige verbonden p..",
+		"A1331a Leningen aan openbare lichamen ..",
+		"A1331b Overige langlopende leningen",
+		"A1332a Uitzettingen in ‘s Rijks schatk..",
+		"A1332b Uitzettingen in de vorm van Ned..",
+		"A1332c Overige uitzettingen met loopt…",
+		"A212 Overige grond- en hulpstoffen",
+		"A213 Onderhanden werk (incl. bouwgrond..",
+		"A214 Gereed product en handelsgoederen",
+		"A215 Vooruitbetalingen",
+		"A221 Vorderingen op openbare lichamen",
+		"A222a Verstrekte kasgeldleningen aan o..",
+		"A222b Overige verstrekte kasgeldleningen",
+		"A223a Rekening courant verhouding met ..",
+		"A223b Rekening courant verhoudingen ov..",
+		"A224 Overige vorderingen",
+		"A225a Uitzettingen in ‘s Rijks schatk..",
+		"A225b Uitzettingen in de vorm van Nede..",
+		"A225c Overige uitzettingen met een loo..",
+		"A23 Liquide middelen (kas en banksaldi)",
+		"A29a Nog te ontvangen bijdragen van de..",
+		"A29b Nog te ontvangen bijdragen van he..",
+		"A29c Nog te ontvangen bijdragen van ov..",
+		"A29d Overige overlopende activa"},
+	"Activa",
+	'taakvelden'[Title_taakveld] IN {"P111 Algemene reserve",
+		"P112 Bestemmingsreserves",
+		"P114 Saldo van rekening",
+		"P12 Voorzieningen",
+		"P131 Obligatieleningen",
+		"P132 Onderhandse leningen van binnenla..",
+		"P133 Onderhandse leningen van binnenla..",
+		"P134 Onderhandse leningen van binnenla..",
+		"P135a Onderhandse leningen van openbar..",
+		"P135b Onderhandse leningen van overige..",
+		"P136 Onderhandse leningen van buitenla..",
+		"P137 Door derden belegde gelden",
+		"P138 Waarborgsommen",
+		"P139 Renteswaps en derivaten",
+		"P140 Vooruitontvangen bedragen..",
+		"P211a Kasgeldleningen van openbare lic..",
+		"P211b Overige kasgeldleningen",
+		"P212 Banksaldi",
+		"P213 Overige vlottende schulden",
+		"P29a Vooruit ontvangen bijdragen van d..",
+		"P29b Vooruit ontvangen bijdragen van h..",
+		"P29c Vooruit ontvangen bijdragen van o..",
+		"P29d Overige overlopende passiva"},
+	"Passiva",
+	'taakvelden'[Title_taakveld]
+)
+
+--- taakvelden | Balans-subgroepen
+SWITCH(
+	TRUE,
+	ISBLANK('taakvelden'[Description_taakveld]),
+	"(Leeg)",
+	'taakvelden'[Description_taakveld] IN {"Balanspost activa - A111 - Kosten verbonden aan sluiten geldlening en saldo agio/disagio",
+		"Balanspost activa - A112 - Kosten onderzoek en ontwikkeling voor een bepaald actief",
+		"Balanspost activa - A113 - Bijdragen aan activa in eigendom van derden"},
+	"A11 - Immateriële vaste activa",
+	'taakvelden'[Description_taakveld] IN {"Balanspost activa - A121 - Gronden en terreinen",
+		"Balanspost activa - A122 - Woonruimten",
+		"Balanspost activa - A123 - Bedrijfsgebouwen",
+		"Balanspost activa - A124 - Grond-, weg- en waterbouwkundige werken",
+		"Balanspost activa - A125 - Vervoermiddelen",
+		"Balanspost activa - A126 - Machines, apparaten en installaties",
+		"Balanspost activa - A129 - Overig"},
+	"A12 - Materiële vaste activa",
+	'taakvelden'[Description_taakveld] IN {"Balanspost activa - A1311 - Kapitaalverstrekking aan deelnemingen",
+		"Balanspost activa - A1312 - Kapitaalverstrekking aan gemeenschappelijke regelingen",
+		"Balanspost activa - A1313 - Kapitaalverstrekking aan overige verbonden partijen",
+		"Balanspost activa - A1321 - Leningen aan woningbouwcorporaties",
+		"Balanspost activa - A1322 - Leningen aan deelnemingen",
+		"Balanspost activa - A1323 - Leningen aan overige verbonden partijen",
+		"Balanspost activa - A1331a - Leningen aan openbare lichamen (art. 1a Wet Fido)",
+		"Balanspost activa - A1331b - Overige langlopende leningen",
+		"Balanspost activa - A1332a - Uitzettingen in ‘s Rijks schatkist met een looptijd gelijk aan of langer dan 1 jaar",
+		"Balanspost activa - A1332b - Uitzettingen in de vorm van Nederlands schuldpapier met een looptijd gelijk aan of langer dan 1 jaar",
+		"Balanspost activa - A1332c - Overige uitzettingen met looptijd gelijk aan of langer dan 1 jaar"},
+	"A13 - Financiële vaste activa",
+	'taakvelden'[Description_taakveld] IN {"Balanspost activa - A212 - Overige grond- en hulpstoffen",
+		"Balanspost activa - A213 - Onderhanden werk (incl. bouwgronden in exploitatie)",
+		"Balanspost activa - A214 - Gereed product en handelsgoederen",
+		"Balanspost activa - A215 - Vooruitbetalingen"},
+	"A21 - Voorraden",
+	'taakvelden'[Description_taakveld] IN {"Balanspost activa - A221 - Vorderingen op openbare lichamen",
+		"Balanspost activa - A222a - Verstrekte kasgeldleningen aan openbare lichamen (art. 1a Wet Fido)",
+		"Balanspost activa - A222b - Overige verstrekte kasgeldleningen",
+		"Balanspost activa - A223a - Rekening courant verhouding met het Rijk",
+		"Balanspost activa - A223b - Rekening courant verhoudingen overige niet-financiële instellingen",
+		"Balanspost activa - A224 - Overige vorderingen",
+		"Balanspost activa - A225a - Uitzettingen in ‘s Rijks schatkist met een looptijd korter dan 1 jaar",
+		"Balanspost activa - A225b - Uitzettingen in de vorm van Nederlands schuldpapier met een looptijd  korter dan 1 jaar",
+		"Balanspost activa - A225c - Overige uitzettingen met een looptijd  korter dan 1 jaar"},
+	"A22 - Uitzettingen",
+	'taakvelden'[Description_taakveld] IN {"Balanspost activa - A23 - Liquide middelen (kas en banksaldi)"},
+	"A23 - Liquide middelen",
+	'taakvelden'[Description_taakveld] IN {"Balanspost activa - A29a - Nog te ontvangen bijdragen van de EU",
+		"Balanspost activa - A29b - Nog te ontvangen bijdragen van het Rijk",
+		"Balanspost activa - A29c - Nog te ontvangen bijdragen van overige overheid",
+		"Balanspost activa - A29d - Overige overlopende activa"},
+	"A29 - Overlopende activa",
+	'taakvelden'[Description_taakveld] IN {"Balanspost passiva - P111 - Algemene reserve",
+		"Balanspost passiva - P112 - Bestemmingsreserves",
+		"Balanspost passiva - P114 - Saldo van rekening"},
+	"P11 - Eigen vermogen",
+	'taakvelden'[Description_taakveld] IN {"Balanspost passiva - P12 - Voorzieningen"},
+	"P12 - Voorzieningen",
+	'taakvelden'[Description_taakveld] IN {"Balanspost passiva - P131 - Obligatieleningen",
+		"Balanspost passiva - P132 - Onderhandse leningen van binnenlandse pensioenfondsen en verzekeraars",
+		"Balanspost passiva - P133 - Onderhandse leningen van binnenlandse banken en overige financiële instellingen",
+		"Balanspost passiva - P134 - Onderhandse leningen van binnenlandse bedrijven",
+		"Balanspost passiva - P135a - Onderhandse leningen van openbare lichamen (art. 1a Wet Fido)",
+		"Balanspost passiva - P135b - Onderhandse leningen van overige binnenlandse sectoren",
+		"Balanspost passiva - P136 - Onderhandse leningen van buitenlandse instellingen",
+		"Balanspost passiva - P137 - Door derden belegde gelden",
+		"Balanspost passiva - P138 - Waarborgsommen",
+		"Balanspost passiva - P139 - Renteswaps en derivaten",
+		"Balanspost passiva - P140 - Vooruitontvangen bedragen met een rentetypische looptijd van één jaar en langer"},
+	"P13 - Vaste schuld",
+	'taakvelden'[Description_taakveld] IN {"Balanspost passiva - P211a - Kasgeldleningen van openbare lichamen (art. 1a Wet Fido)",
+		"Balanspost passiva - P211b - Overige kasgeldleningen",
+		"Balanspost passiva - P212 - Banksaldi",
+		"Balanspost passiva - P213 - Overige vlottende schulden"},
+	"P21 - Vlottende schuld",
+	'taakvelden'[Description_taakveld] IN {"Balanspost passiva - P29a - Vooruit ontvangen bijdragen van de EU",
+		"Balanspost passiva - P29b - Vooruit ontvangen bijdragen van het Rijk",
+		"Balanspost passiva - P29c - Vooruit ontvangen bijdragen van overige overheid",
+		"Balanspost passiva - P29d - Overige overlopende passiva"},
+	"P29 - Overlopende passiva",
+	"Overige"
+)
+
+--- taakvelden | Balans-groepen
+SWITCH(
+	TRUE,
+	ISBLANK('taakvelden'[Balans-subgroepen]),
+	"(Leeg)",
+	'taakvelden'[Balans-subgroepen] IN {"A11 - Immateriële vaste activa",
+		"A12 - Materiële vaste activa",
+		"A13 - Financiële vaste activa"},
+	"A1 - Vaste activa",
+	'taakvelden'[Balans-subgroepen] IN {"A29 - Overlopende activa"},
+	"A29 - Overlopende activa",
+	'taakvelden'[Balans-subgroepen] IN {"A21 - Voorraden",
+		"A22 - Uitzettingen",
+		"A23 - Liquide middelen"},
+	"A2a - Vlottende activa",
+	'taakvelden'[Balans-subgroepen] IN {"P11 - Eigen vermogen",
+		"P12 - Voorzieningen",
+		"P13 - Vaste schuld"},
+	"P1 - Vaste passiva",
+	'taakvelden'[Balans-subgroepen] IN {"P21 - Vlottende schuld"},
+	"P2a - Vlottende passiva",
+	'taakvelden'[Balans-subgroepen] IN {"P29 - Overlopende passiva"},
+	"P2b - Overlopende passiva",
+	"Overige"
+)
+
+--- begrotingen_jaarrekeningen | bedrag
+begrotingen_jaarrekeningen[k_2ePlaatsing_2] * 1000
+
+--- LocalDateTable_614fa101-a599-4355-b02c-683e77c8c30a | Jaar
+YEAR([Date])
+
+--- LocalDateTable_614fa101-a599-4355-b02c-683e77c8c30a | MonthNo
+MONTH([Date])
+
+--- LocalDateTable_614fa101-a599-4355-b02c-683e77c8c30a | Maand
+FORMAT([Date], "MMMM")
+
+--- LocalDateTable_614fa101-a599-4355-b02c-683e77c8c30a | QuarterNo
+INT(([MonthNo] + 2) / 3)
+
+--- LocalDateTable_614fa101-a599-4355-b02c-683e77c8c30a | Kwartaal
+"Kwartaal " & [QuarterNo]
+
+--- LocalDateTable_614fa101-a599-4355-b02c-683e77c8c30a | Dag
+DAY([Date])
+
+--- begrotingen_jaarrekeningen | CombinedKey_solvabiliteit
+begrotingen_jaarrekeningen[Gemeentenaam] & "-" & begrotingen_jaarrekeningen[Verslagsoort]
+
+--- solvabiliteit | CombinedKey
+solvabiliteit[Gemeentecode] & "-" & solvabiliteit[Verslagsoort]
+
+--- GemeenteInclReferentie | Gemeentenaam (groepen)
+SWITCH(
+	TRUE,
+	ISBLANK('GemeenteInclReferentie'[Gemeentenaam]),
+	"(Leeg)",
+	'GemeenteInclReferentie'[Gemeentenaam] IN {"Aa en Hunze",
+		"Aalburg",
+		"Aalsmeer",
+		"Aalten",
+		"Achtkarspelen",
+		"Alblasserdam",
+		"Albrandswaard",
+		"Alkmaar",
+		"Almelo",
+		"Almere",
+		"Alphen aan den Rijn",
+		"Alphen-Chaam",
+		"Altena",
+		"Ameland",
+		"Amersfoort",
+		"Amstelveen",
+		"Amsterdam",
+		"Apeldoorn",
+		"Appingedam",
+		"Arnhem",
+		"Assen",
+		"Asten",
+		"Baarle-Nassau",
+		"Baarn",
+		"Barendrecht",
+		"Barneveld",
+		"Beek (L.)",
+		"Bedum",
+		"Beekdaelen",
+		"Beek",
+		"Beesel",
+		"Berg en Dal",
+		"Beemster",
+		"Bergeijk",
+		"Bergen (L.)",
+		"Bellingwedde",
+		"Bergen (NH.)",
+		"Bergen op Zoom",
+		"Berkelland",
+		"Bernheze",
+		"Best",
+		"Beuningen",
+		"Beverwijk",
+		"Bladel",
+		"Blaricum",
+		"Bloemendaal",
+		"Bodegraven-Reeuwijk",
+		"Binnenmaas",
+		"Boekel",
+		"Borger-Odoorn",
+		"Borne",
+		"Borsele",
+		"Boxtel",
+		"Breda",
+		"Bronckhorst",
+		"Brummen",
+		"Brunssum",
+		"Boxmeer",
+		"Bunnik",
+		"Bunschoten",
+		"Buren",
+		"Brielle",
+		"Capelle aan den IJssel",
+		"Castricum",
+		"Coevorden",
+		"Cranendonck",
+		"Culemborg",
+		"Dalfsen",
+		"Dantumadiel",
+		"De Bilt",
+		"De Fryske Marren",
+		"De Ronde Venen",
+		"De Wolden",
+		"Cromstrijen",
+		"Delft",
+		"Cuijk",
+		"Den Helder",
+		"Deurne",
+		"Deventer",
+		"Diemen",
+		"Dijk en Waard",
+		"Dinkelland",
+		"De Marne",
+		"Doesburg",
+		"Doetinchem",
+		"Dongen",
+		"Dordrecht",
+		"Delfzijl",
+		"Drechterland",
+		"Drimmelen",
+		"Dronten",
+		"Druten",
+		"Duiven",
+		"Echt-Susteren",
+		"Edam-Volendam",
+		"Ede",
+		"Eemnes",
+		"Eemsdelta",
+		"Dongeradeel",
+		"Eersel",
+		"Eijsden-Margraten",
+		"Eindhoven",
+		"Elburg",
+		"Emmen",
+		"Enkhuizen",
+		"Enschede",
+		"Epe",
+		"Ermelo",
+		"Etten-Leur",
+		"Geertruidenberg",
+		"Geldrop-Mierlo",
+		"Eemsmond",
+		"Gemert-Bakel",
+		"Gennep",
+		"Gilze en Rijen",
+		"Goeree-Overflakkee",
+		"Goes",
+		"Goirle",
+		"Gooise Meren",
+		"Gorinchem",
+		"Gouda",
+		"Groningen",
+		"Gulpen-Wittem",
+		"Ferwerderadiel",
+		"Haaksbergen",
+		"Franekeradeel",
+		"Haarlem",
+		"Haarlemmermeer",
+		"Geldermalsen",
+		"Halderberge",
+		"Hardenberg",
+		"Harderwijk",
+		"Hardinxveld-Giessendam",
+		"Giessenlanden",
+		"Harlingen",
+		"Hattem",
+		"Heemskerk",
+		"Heemstede",
+		"Heerde",
+		"Heerenveen",
+		"Heerlen",
+		"Heeze-Leende",
+		"Grave",
+		"Heiloo",
+		"Hellendoorn",
+		"Grootegast",
+		"Helmond",
+		"Hendrik-Ido-Ambacht",
+		"Hengelo (O.)",
+		"Haaren",
+		"Het Hogeland",
+		"Heumen",
+		"Haarlemmerliede en Spaarnwoude",
+		"Heusden",
+		"Hillegom",
+		"Hilvarenbeek",
+		"Hilversum",
+		"Hoeksche Waard",
+		"Hof van Twente",
+		"Haren",
+		"Hollands Kroon",
+		"Hoogeveen",
+		"Hoorn",
+		"Horst aan de Maas",
+		"Houten",
+		"Huizen",
+		"Hulst",
+		"Heerhugowaard",
+		"IJsselstein",
+		"Kaag en Braassem",
+		"Kampen",
+		"Kapelle",
+		"Katwijk",
+		"Hellevoetsluis",
+		"Kerkrade",
+		"Koggenland",
+		"Krimpen aan den IJssel",
+		"Hengelo",
+		"Krimpenerwaard",
+		"Laarbeek",
+		"het Bildt",
+		"Land van Cuijk",
+		"Landgraaf",
+		"Landsmeer",
+		"Lansingerland",
+		"Laren (NH.)",
+		"Leeuwarden",
+		"Leiden",
+		"Leiderdorp",
+		"Leidschendam-Voorburg",
+		"Lelystad",
+		"Leudal",
+		"Leusden",
+		"Hoogezand-Sappemeer",
+		"Lingewaard",
+		"Lisse",
+		"Lochem",
+		"Loon op Zand",
+		"Lopik",
+		"Losser",
+		"Maasdriel",
+		"Maasgouw",
+		"Maashorst",
+		"Maassluis",
+		"Maastricht",
+		"Kollumerland en Nieuwkruisland",
+		"Medemblik",
+		"Korendijk",
+		"Meerssen",
+		"Meierijstad",
+		"Meppel",
+		"Middelburg (Z.)",
+		"Midden-Delfland",
+		"Landerd",
+		"Midden-Drenthe",
+		"Midden-Groningen",
+		"Moerdijk",
+		"Langedijk",
+		"Molenlanden",
+		"Montferland",
+		"Laren",
+		"Montfoort",
+		"Leek",
+		"Mook en Middelaar",
+		"Leerdam",
+		"Neder-Betuwe",
+		"Nederweert",
+		"Nieuwegein",
+		"Nieuwkoop",
+		"Nijkerk",
+		"Leeuwarderadeel",
+		"Nijmegen",
+		"Nissewaard",
+		"Noardeast-Fryslân",
+		"Noord-Beveland",
+		"Lingewaal",
+		"Noordenveld",
+		"Noordoostpolder",
+		"Noordwijk",
+		"Nuenen, Gerwen en Nederwetten",
+		"Nunspeet",
+		"Oegstgeest",
+		"Loppersum",
+		"Oirschot",
+		"Littenseradiel",
+		"Oisterwijk",
+		"Oldambt",
+		"Oldebroek",
+		"Oldenzaal",
+		"Olst-Wijhe",
+		"Ommen",
+		"Oost Gelre",
+		"Marum",
+		"Oosterhout",
+		"Ooststellingwerf",
+		"Oostzaan",
+		"Opmeer",
+		"Opsterland",
+		"Middelburg",
+		"Oss",
+		"Oude IJsselstreek",
+		"Ouder-Amstel",
+		"Oudewater",
+		"Menameradiel",
+		"Overbetuwe",
+		"Mill en Sint Hubert",
+		"Papendrecht",
+		"Menterwolde",
+		"Peel en Maas",
+		"Pekela",
+		"Pijnacker-Nootdorp",
+		"Molenwaard",
+		"Purmerend",
+		"Putten",
+		"Raalte",
+		"Reimerswaal",
+		"Renkum",
+		"Neerijnen",
+		"Renswoude",
+		"Reusel-De Mierden",
+		"Rheden",
+		"Rhenen",
+		"Ridderkerk",
+		"Rijssen-Holten",
+		"Rijswijk (ZH.)",
+		"Roerdalen",
+		"Roermond",
+		"Roosendaal",
+		"Rotterdam",
+		"Noordwijkerhout",
+		"Rozendaal",
+		"Rucphen",
+		"Schagen",
+		"Nuth",
+		"Scherpenzeel",
+		"Schiedam",
+		"Schiermonnikoog",
+		"Schouwen-Duiveland",
+		"'s-Gravenhage",
+		"'s-Hertogenbosch",
+		"Simpelveld",
+		"Sint-Michielsgestel",
+		"Sittard-Geleen",
+		"Onderbanken",
+		"Sliedrecht",
+		"Sluis",
+		"Smallingerland",
+		"Soest",
+		"Someren",
+		"Son en Breugel",
+		"Stadskanaal",
+		"Staphorst",
+		"Oud-Beijerland",
+		"Stede Broec",
+		"Steenbergen",
+		"Steenwijkerland",
+		"Stein (L.)",
+		"Stichtse Vecht",
+		"Súdwest-Fryslân",
+		"Terneuzen",
+		"Terschelling",
+		"Texel",
+		"Teylingen",
+		"Tholen",
+		"Tiel",
+		"Tilburg",
+		"Tubbergen",
+		"Twenterand",
+		"Tynaarlo",
+		"Tytsjerksteradiel",
+		"Uitgeest",
+		"Uithoorn",
+		"Urk",
+		"Rijswijk",
+		"Utrecht",
+		"Utrechtse Heuvelrug",
+		"Vaals",
+		"Valkenburg aan de Geul",
+		"Valkenswaard",
+		"Rijnwaarden",
+		"Veendam",
+		"Veenendaal",
+		"Veere",
+		"Veldhoven",
+		"Velsen",
+		"Venlo",
+		"Venray",
+		"Schinnen",
+		"Vijfheerenlanden",
+		"Vlaardingen",
+		"Vlieland",
+		"Vlissingen",
+		"Voerendaal",
+		"Sint Anthonis",
+		"Voorne aan Zee",
+		"Voorschoten",
+		"Schijndel",
+		"Voorst",
+		"Vught",
+		"Waadhoeke",
+		"Waalre",
+		"Waalwijk",
+		"Waddinxveen",
+		"Wageningen",
+		"Wassenaar",
+		"Waterland",
+		"Sint-Oedenrode",
+		"Weert",
+		"West Betuwe",
+		"West Maas en Waal",
+		"Westerkwartier",
+		"Slochteren",
+		"Westerveld",
+		"Westervoort",
+		"Stein",
+		"Westerwolde",
+		"Westland",
+		"Strijen",
+		"Weststellingwerf",
+		"Wierden",
+		"Ten Boer",
+		"Wijchen",
+		"Wijdemeren",
+		"Wijk bij Duurstede",
+		"Winterswijk",
+		"Woensdrecht",
+		"Woerden",
+		"Wormerland",
+		"Woudenberg",
+		"Zaanstad",
+		"Zaltbommel",
+		"Zandvoort",
+		"Zeewolde",
+		"Uden",
+		"Zeist",
+		"Zevenaar",
+		"Zoetermeer",
+		"Zoeterwoude",
+		"Zuidplas",
+		"Zundert",
+		"Zutphen",
+		"Zwartewaterland",
+		"Zwijndrecht",
+		"Zwolle",
+		"Vianen",
+		"Veghel",
+		"Vlagtwedde",
+		"Weesp",
+		"Werkendam",
+		"Westvoorne",
+		"Winsum",
+		"Woudrichem",
+		"Zederik",
+		"Zuidhorn"},
+	"Jouw organisatie",
+	'GemeenteInclReferentie'[Gemeentenaam] IN {"Referentiegroep"},
+	"Referentiegroep",
+	'GemeenteInclReferentie'[Gemeentenaam]
+)
+
+--- begrotingen_jaarrekeningen | CombinedKey_gemeenten
+begrotingen_jaarrekeningen[Gemeenten] & "-" & begrotingen_jaarrekeningen[Year]
+
+--- gemeenten | CombinedKey_gemeenten
+gemeenten[Gemeentecodegm] & "-" & gemeenten[Jaar]
+
+--- dtGemeenten | Inwonergroep
+IF(
+    NOT(ISBLANK(dtGemeenten[MaxInwoneraantal])),
+    SWITCH(
+        TRUE(),
+        dtGemeenten[MaxInwoneraantal] < 25000, "<25k",
+        dtGemeenten[MaxInwoneraantal] <= 50000, "25k - 50k",
+        dtGemeenten[MaxInwoneraantal] <= 100000, "50k - 100k",
+        dtGemeenten[MaxInwoneraantal] <= 300000, ">100k",
+        "G4"
+    )
+)
+
+--- taakvelden | Spuks
+SWITCH(
+	TRUE,
+	ISBLANK('taakvelden'[Title_taakveld]),
+	"(Leeg)",
+	'taakvelden'[Title_taakveld] IN {"0.1 Bestuur",
+		"0.10 Mutaties reserves",
+		"0.11 Resultaat van de rekening van bat..",
+		"0.2 Burgerzaken",
+		"0.3 Beheer overige gebouwen en gronden",
+		"0.4 Overhead",
+		"0.5 Treasury",
+		"0.61 OZB woningen",
+		"0.62 OZB niet-woningen",
+		"0.63 Parkeerbelasting",
+		"0.64 Belastingen overig",
+		"0.8 Overige baten en lasten",
+		"0.9 Vennootschapsbelasting",
+		"1.1 Crisisbeheersing en brandweer",
+		"1.2 Openbare orde en veiligheid",
+		"2.1 Verkeer en vervoer",
+		"2.2 Parkeren",
+		"2.3 Recreatieve havens",
+		"2.4 Economische havens en waterwegen",
+		"2.5 Openbaar vervoer",
+		"3.1 Economische ontwikkeling",
+		"3.2 Fysieke bedrijfsinfrastructuur",
+		"3.3 Bedrijvenloket en bedrijfsregelingen",
+		"3.4 Economische promotie",
+		"4.1 Openbaar basisonderwijs",
+		"4.2 Onderwijshuisvesting",
+		"4.3 Onderwijsbeleid en leerlingzaken",
+		"5.1 Sportbeleid en activering",
+		"5.2 Sportaccommodaties",
+		"5.3 Cultuurpresentatie, cultuurproduct..",
+		"5.4 Musea",
+		"5.5 Cultureel erfgoed",
+		"5.6 Media",
+		"5.7 Openbaar groen en (openlucht) recr..",
+		"6.1 Samenkracht en burgerparticipatie",
+		"6.2 Wijkteams",
+		"6.3 Inkomensregelingen",
+		"6.4 Begeleide participatie",
+		"6.5 Arbeidsparticipatie",
+		"6.6 Maatwerkvoorziening (WMO)",
+		"6.71 Maatwerkdienstverlening 18+",
+		"6.71a Huishoudelijke hulp (WMO)",
+		"6.71b Begeleiding (WMO)",
+		"6.71c Dagbesteding (WMO)",
+		"6.71d Overige maatwerkarrangementen ..",
+		"6.72 Maatwerkdienstverlening 18-",
+		"6.72a Jeugdhulp begeleiding",
+		"6.72b Jeugdhulp behandeling",
+		"6.72c Jeugdhulp dagbesteding",
+		"6.72d Jeugdhulp zonder verblijf overig",
+		"6.73a Pleegzorg",
+		"6.73b Gezinsgericht",
+		"6.73c Jeugdhulp met verblijf overig",
+		"6.74a Jeugd behandeling GGZ zonder ..",
+		"6.74b Jeugdhulp crisis/LTA/GGZ-verblijf",
+		"6.74c Gesloten plaatsing",
+		"6.81 Geëscaleerde zorg 18+",
+		"6.81a Beschermd wonen (WMO)",
+		"6.81b Maatschappelijke- en vrouwenopvang",
+		"6.82 Geëscaleerde zorg 18-",
+		"6.82a Jeugdbescherming",
+		"6.82b Jeugdreclassering",
+		"7.1 Volksgezondheid",
+		"7.2 Riolering",
+		"7.3 Afval",
+		"7.4 Milieubeheer",
+		"7.5 Begraafplaatsen en crematoria",
+		"8.1 Ruimte en leefomgeving",
+		"8.2 Grondexploitatie (niet-bedrijvente..",
+		"8.3 Wonen en bouwen",
+		"A111 Kosten verbonden aan sluiten geld..",
+		"A112 Kosten onderzoek en ontwikkeling ..",
+		"A113 Bijdragen aan activa in eigendom ..",
+		"A121 Gronden en terreinen",
+		"A122 Woonruimten",
+		"A123 Bedrijfsgebouwen",
+		"A124 Grond-, weg- en waterbouwkundige ..",
+		"A125 Vervoermiddelen",
+		"A126 Machines, apparaten en installaties",
+		"A129 Overig",
+		"A1311 Kapitaalverstrekking aan deelnem..",
+		"A1312 Kapitaalverstrekking aan gemeens..",
+		"A1313 Kapitaalverstrekking aan overige..",
+		"A1321 Leningen aan woningbouwcorporaties",
+		"A1322 Leningen aan deelnemingen",
+		"A1323 Leningen aan overige verbonden p..",
+		"A1331a Leningen aan openbare lichamen ..",
+		"A1331b Overige langlopende leningen",
+		"A1332a Uitzettingen in ‘s Rijks schatk..",
+		"A1332b Uitzettingen in de vorm van Ned..",
+		"A1332c Overige uitzettingen met loopt…",
+		"A212 Overige grond- en hulpstoffen",
+		"A213 Onderhanden werk (incl. bouwgrond..",
+		"A214 Gereed product en handelsgoederen",
+		"A215 Vooruitbetalingen",
+		"A221 Vorderingen op openbare lichamen",
+		"A222a Verstrekte kasgeldleningen aan o..",
+		"A222b Overige verstrekte kasgeldleningen",
+		"A223a Rekening courant verhouding met ..",
+		"A223b Rekening courant verhoudingen ov..",
+		"A224 Overige vorderingen",
+		"A225a Uitzettingen in ‘s Rijks schatk..",
+		"A225b Uitzettingen in de vorm van Nede..",
+		"A225c Overige uitzettingen met een loo..",
+		"A23 Liquide middelen (kas en banksaldi)",
+		"A29a Nog te ontvangen bijdragen van de..",
+		"A29b Nog te ontvangen bijdragen van he..",
+		"A29c Nog te ontvangen bijdragen van ov..",
+		"A29d Overige overlopende activa",
+		"P111 Algemene reserve",
+		"P112 Bestemmingsreserves",
+		"P114 Saldo van rekening",
+		"P12 Voorzieningen",
+		"P131 Obligatieleningen",
+		"P132 Onderhandse leningen van binnenla..",
+		"P133 Onderhandse leningen van binnenla..",
+		"P134 Onderhandse leningen van binnenla..",
+		"P135a Onderhandse leningen van openbar..",
+		"P135b Onderhandse leningen van overige..",
+		"P136 Onderhandse leningen van buitenla..",
+		"P137 Door derden belegde gelden",
+		"P138 Waarborgsommen",
+		"P139 Renteswaps en derivaten",
+		"P140 Vooruitontvangen bedragen..",
+		"P211a Kasgeldleningen van openbare lic..",
+		"P211b Overige kasgeldleningen",
+		"P212 Banksaldi",
+		"P213 Overige vlottende schulden",
+		"P29a Vooruit ontvangen bijdragen van d..",
+		"P29b Vooruit ontvangen bijdragen van h..",
+		"P29c Vooruit ontvangen bijdragen van o..",
+		"P29d Overige overlopende passiva"},
+	"Overige baten rijk",
+	'taakvelden'[Title_taakveld] IN {"0.7 Algemene uitkeringen en overige ui.."},
+	"Rijk",
+	'taakvelden'[Title_taakveld]
+)
+
+--- dtGemeenten | inwonergroep_order
+IF(
+    NOT(ISBLANK(dtGemeenten[MaxInwoneraantal])),
+    SWITCH(
+        TRUE(),
+        dtGemeenten[MaxInwoneraantal] < 25000, "1",
+        dtGemeenten[MaxInwoneraantal] <= 50000, "2",
+        dtGemeenten[MaxInwoneraantal] <= 100000, "3",
+        dtGemeenten[MaxInwoneraantal] <= 300000, "4",
+        "5"
+    )
+)
+
+--- LocalDateTable_228af5d1-97fd-42e7-acd3-579dc4d52a8c | Jaar
+YEAR([Date])
+
+--- LocalDateTable_228af5d1-97fd-42e7-acd3-579dc4d52a8c | MonthNo
+MONTH([Date])
+
+--- LocalDateTable_228af5d1-97fd-42e7-acd3-579dc4d52a8c | Maand
+FORMAT([Date], "MMMM")
+
+--- LocalDateTable_228af5d1-97fd-42e7-acd3-579dc4d52a8c | QuarterNo
+INT(([MonthNo] + 2) / 3)
+
+--- LocalDateTable_228af5d1-97fd-42e7-acd3-579dc4d52a8c | Kwartaal
+"Kwartaal " & [QuarterNo]
+
+--- LocalDateTable_228af5d1-97fd-42e7-acd3-579dc4d52a8c | Dag
+DAY([Date])
+
+--- LocalDateTable_f5e1c61b-af0f-47a1-9bdc-6f92f0eefc11 | Jaar
+YEAR([Date])
+
+--- LocalDateTable_f5e1c61b-af0f-47a1-9bdc-6f92f0eefc11 | MonthNo
+MONTH([Date])
+
+--- LocalDateTable_f5e1c61b-af0f-47a1-9bdc-6f92f0eefc11 | Maand
+FORMAT([Date], "MMMM")
+
+--- LocalDateTable_f5e1c61b-af0f-47a1-9bdc-6f92f0eefc11 | QuarterNo
+INT(([MonthNo] + 2) / 3)
+
+--- LocalDateTable_f5e1c61b-af0f-47a1-9bdc-6f92f0eefc11 | Kwartaal
+"Kwartaal " & [QuarterNo]
+
+--- LocalDateTable_f5e1c61b-af0f-47a1-9bdc-6f92f0eefc11 | Dag
+DAY([Date])
+
+--- begrotingen_jaarrekeningen | Gemeentenaam
+RELATED(gemeenten[Gemeentenaam])
+
+--- LocalDateTable_5c83270a-4821-4026-802d-50586514665b | Jaar
+YEAR([Date])
+
+--- LocalDateTable_5c83270a-4821-4026-802d-50586514665b | MonthNo
+MONTH([Date])
+
+--- LocalDateTable_5c83270a-4821-4026-802d-50586514665b | Maand
+FORMAT([Date], "MMMM")
+
+--- LocalDateTable_5c83270a-4821-4026-802d-50586514665b | QuarterNo
+INT(([MonthNo] + 2) / 3)
+
+--- LocalDateTable_5c83270a-4821-4026-802d-50586514665b | Kwartaal
+"Kwartaal " & [QuarterNo]
+
+--- LocalDateTable_5c83270a-4821-4026-802d-50586514665b | Dag
+DAY([Date])
+
+================================================================================
+CALCULATED TABLES  (10)
+================================================================================
+
+--- DateTableTemplate_73a9ffc0-7729-4677-a11d-e50016e462ef
+Calendar(Date(2015,1,1), Date(2015,1,1))
+
+--- CalendarTable
+CALENDAR("1-1-2018", "31-12-2025")
+
+--- MeasureTable
+Row("Kolom", BLANK())
+
+--- LocalDateTable_614fa101-a599-4355-b02c-683e77c8c30a
+Calendar(Date(Year(MIN('solvabiliteit'[Jaar])), 1, 1), Date(Year(MAX('solvabiliteit'[Jaar])), 12, 31))
+
+--- GemeenteInclReferentie
+UNION(
+    DISTINCT( gemeenten[Gemeentenaam] ) ,
+{"Referentiegroep"}
+)
+
+--- dtGemeenten
+SUMMARIZE(
+    ADDCOLUMNS(
+        DISTINCT(gemeenten[Gemeentenaam]),
+        "MaxInwoneraantal", CALCULATE(MAX(gemeenten[Inwoneraantal])),
+        "Provincienaam", CALCULATE(FIRSTNONBLANK(gemeenten[Provincienaam], 1))
+    ),
+    gemeenten[Gemeentenaam],
+    [Provincienaam],
+    [MaxInwoneraantal]
+)
+
+--- lasten
+DISTINCT(categorieen[Lasten])
+
+--- LocalDateTable_228af5d1-97fd-42e7-acd3-579dc4d52a8c
+Calendar(Date(Year(MIN('CalendarTable'[Date])), 1, 1), Date(Year(MAX('CalendarTable'[Date])), 12, 31))
+
+--- LocalDateTable_f5e1c61b-af0f-47a1-9bdc-6f92f0eefc11
+Calendar(Date(Year(MIN('Inwoneraantallen'[Jaar])), 1, 1), Date(Year(MAX('Inwoneraantallen'[Jaar])), 12, 31))
+
+--- LocalDateTable_5c83270a-4821-4026-802d-50586514665b
+Calendar(Date(Year(MIN('gemeenten'[Jaar])), 1, 1), Date(Year(MAX('gemeenten'[Jaar])), 12, 31))

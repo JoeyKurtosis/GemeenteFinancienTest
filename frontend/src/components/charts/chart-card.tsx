@@ -1,9 +1,12 @@
-import { useEffect, useState } from "react";
-import { Expand06, MessageChatSquare, XClose } from "@untitledui/icons";
+import { type RefObject, useEffect, useRef, useState } from "react";
+import { Edit05, Expand06, MessageChatSquare, XClose } from "@untitledui/icons";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, LabelList, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartLegendContent, ChartTooltipContent } from "@/components/application/charts/charts-base";
 import { Dialog, DialogTrigger, Modal, ModalOverlay } from "@/components/application/modals/modal";
+import { Toggle } from "@/components/base/toggle/toggle";
 import { ChartDownloadButton } from "@/components/charts/chart-download-button";
+import { ChartDataTable } from "@/components/charts/chart-data-table";
+import { formatShare, formatTooltipValue, formatValue, type ValueFormat } from "@/components/charts/chart-format";
 import { ChartSkeleton } from "@/components/charts/chart-skeleton";
 import { useAuth } from "@/features/auth";
 import type { ChartComment } from "@/features/comments";
@@ -21,49 +24,6 @@ export interface ChartSeries {
 }
 
 export type ChartType = "bar" | "area" | "horizontal-bar" | "line";
-
-/**
- * How a chart's figures read: euros per inhabitant, whole euros rounded off, a percentage,
- * or a bare index number (a year-on-year index against inflation carries no unit at all).
- */
-export type ValueFormat = "euro" | "euro-compact" | "percent" | "index";
-
-/**
- * Absolute bedragen run to ten digits, which no axis or bar segment can hold: a gemeente's
- * begroting reads as "€ 80,5 mln." and the largest as "€ 6,5 mld.".
- */
-const euroCompact = new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-    notation: "compact",
-    maximumFractionDigits: 1,
-    minimumFractionDigits: 0,
-});
-
-/**
- * Tenths of a million: the finest these figures are read to, and so the step they are
- * rounded to before printing.
- *
- * Rounding only the printed digits would leave the Resultaat card contradicting itself —
- * inkomsten and uitgaven a rounding apart both read "€ 80,5 mln.", while the saldo between
- * them kept its own scale and read "€ 1K" against them. Anything under a tenth of a million
- * is nothing at this size, and now says so.
- */
-const EURO_COMPACT_STAP = 100_000;
-
-export const formatValue = (value: unknown, format: ValueFormat): string => {
-    const number = Number(value) || 0;
-    if (format === "percent") {
-        return `${number.toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
-    }
-    if (format === "index") {
-        return number.toLocaleString("nl-NL");
-    }
-    if (format === "euro-compact") {
-        return euroCompact.format(Math.round(number / EURO_COMPACT_STAP) * EURO_COMPACT_STAP);
-    }
-    return `€ ${number.toLocaleString("nl-NL")}`;
-};
 
 interface ChartCardProps {
     title: string;
@@ -86,8 +46,8 @@ interface ChartCardProps {
     /**
      * The total to print at the end of each bar, one per row, in `data` order
      * (`horizontal-bar` only). Without it the label is the sum of the row's segments, which is
-     * not the same number: each segment is rounded on its way here, and the rounding does not
-     * cancel. Pass the backend's `totalen`, which is the total measured and rounded once.
+     * not quite the same number: each segment is rounded on its way here, and the roundings do
+     * not cancel. Pass the backend's `totalen`, which is the total measured and rounded once.
      */
     totals?: number[];
     /** Show a skeleton placeholder instead of the chart while data loads. */
@@ -127,7 +87,12 @@ export function ChartCard({
     comment,
     onCommentChange,
 }: ChartCardProps) {
+    const chartRef = useRef<HTMLDivElement>(null);
+    const expandedChartRef = useRef<HTMLDivElement>(null);
     const [isExpanded, setIsExpanded] = useState(false);
+    // The figures beside the points, which the reader asks for rather than arrives at: off on
+    // every opening of the modal, however it was left the time before.
+    const [showPoints, setShowPoints] = useState(false);
     const { isAuthenticated } = useAuth();
     // Lets a note in het notities-overzicht link back to this exact card. Arriving on that link
     // opens the chart at full size, where the note is printed under it.
@@ -137,12 +102,32 @@ export function ChartCard({
         if (shouldExpand && expandable) setIsExpanded(true);
     }, [shouldExpand, expandable]);
 
-    const chartContentProps = { data, series, chartType, xAxisKey, xAxisLabel, yAxisLabel, showLegend, valueFormat, normalize, totals };
+    const chartContentProps = { title, data, series, chartType, xAxisKey, xAxisLabel, yAxisLabel, showLegend, valueFormat, normalize, totals };
+    const table = <ChartDataTable title={title} data={data} series={series} xAxisKey={xAxisKey} xAxisLabel={xAxisLabel} valueFormat={valueFormat} totals={totals} />;
+
+    // What a comment button needs, or null where this chart has no note to write: a signed-in
+    // reader and a caller that both named the chart and asked to hear about the change.
+    const commentEditor = isAuthenticated && chartId && onCommentChange ? { chartId, onSaved: onCommentChange } : null;
+
+    // Only the trend shapes have points to mark; a bar carries its figures on the bars
+    // themselves, so there is nothing there to turn on.
+    const pointsToggle =
+        chartType === "line" || chartType === "area" ? (
+            <Toggle
+                size="sm"
+                label="Waarden tonen"
+                aria-label="Waarden bij de punten tonen"
+                isSelected={showPoints}
+                onChange={setShowPoints}
+                className="mr-2 flex-row items-center gap-2"
+            />
+        ) : null;
 
     // The same figures the chart is drawn from, as a spreadsheet. `normalize` goes along because
     // it decides whether these values read as amounts or as shares — see buildChartSheet.
-    const downloadButton = !isLoading ? (
+    const downloadButton = (imageRef: RefObject<HTMLDivElement | null>) => !isLoading ? (
         <ChartDownloadButton
+            imageRef={imageRef}
             title={title}
             data={data}
             series={series}
@@ -150,6 +135,7 @@ export function ChartCard({
             xAxisLabel={xAxisLabel}
             valueFormat={valueFormat}
             normalize={normalize}
+            shareBasis={(chartType === "bar" || chartType === "horizontal-bar") && series.length > 1 ? "row" : undefined}
             totals={totals}
         />
     ) : null;
@@ -169,38 +155,48 @@ export function ChartCard({
                 <div className="flex items-center justify-between px-5 pt-5 pb-1">
                     <h3 className="text-md font-semibold text-primary">{title}</h3>
                     <div className="flex items-center gap-1">
-                        {isAuthenticated && chartId && onCommentChange && !isLoading && (
-                            <ChartCommentButton chartId={chartId} comment={comment} onSaved={onCommentChange} />
-                        )}
-                        {isAuthenticated && downloadButton}
+                        {commentEditor && !isLoading && <ChartCommentButton {...commentEditor} comment={comment} />}
+                        {downloadButton(chartRef)}
                         {expandable && !isLoading && (
                             <button
                                 type="button"
                                 onClick={() => setIsExpanded(true)}
-                                className="rounded-md p-1.5 text-fg-quaternary transition duration-100 ease-linear hover:bg-secondary_hover hover:text-fg-quaternary_hover"
+                                aria-label={`${title} vergroten`}
+                                className="rounded-md p-1.5 text-fg-tertiary outline-focus-ring transition duration-100 ease-linear hover:bg-secondary_hover focus-visible:outline-2 focus-visible:outline-offset-2"
                             >
                                 <Expand06 className="size-5" aria-hidden="true" />
                             </button>
                         )}
                     </div>
                 </div>
-                <div className="px-5 pb-5">{isLoading ? <ChartSkeleton /> : <ChartContent {...chartContentProps} maxHeight={maxHeight} />}</div>
+                <div className="px-5 pb-5">{isLoading ? <ChartSkeleton /> : <><div ref={chartRef}><ChartContent {...chartContentProps} maxHeight={maxHeight} /></div>{table}</>}</div>
             </div>
 
             {expandable && !isLoading && (
-                <DialogTrigger isOpen={isExpanded} onOpenChange={setIsExpanded}>
+                <DialogTrigger
+                    isOpen={isExpanded}
+                    onOpenChange={(open) => {
+                        setIsExpanded(open);
+                        if (!open) setShowPoints(false);
+                    }}
+                >
                     <ModalOverlay>
                         <Modal className="max-w-5xl">
-                            <Dialog className="flex-col">
+                            <Dialog aria-label={title} className="flex-col">
                                 <div className="w-full rounded-xl bg-primary p-6 shadow-lg">
                                     <div className="mb-4 flex items-center justify-between">
                                         <h3 className="text-lg font-semibold text-primary">{title}</h3>
                                         <div className="flex items-center gap-1">
-                                            {downloadButton}
+                                            {pointsToggle}
+                                            {/* A note that exists is edited by the pencil beside it, under the chart;
+                                                only the chart without one still needs a way in from up here. */}
+                                            {commentEditor && !comment?.text && <ChartCommentButton {...commentEditor} comment={comment} />}
+                                            {downloadButton(expandedChartRef)}
                                             <button
                                                 type="button"
                                                 onClick={() => setIsExpanded(false)}
-                                                className="rounded-md p-1.5 text-fg-quaternary transition duration-100 ease-linear hover:bg-secondary_hover hover:text-fg-quaternary_hover"
+                                                aria-label="Sluiten"
+                                                className="cursor-pointer rounded-md p-1.5 text-fg-tertiary outline-focus-ring transition duration-100 ease-linear hover:bg-secondary_hover focus-visible:outline-2 focus-visible:outline-offset-2"
                                             >
                                                 <XClose className="size-5" aria-hidden="true" />
                                             </button>
@@ -208,14 +204,24 @@ export function ChartCard({
                                     </div>
                                     {/* Expanding is what you do to see the long list, so the
                                         cap is roomier here — it still scrolls, in a taller box. */}
-                                    <ChartContent {...chartContentProps} height={500} maxHeight={maxHeight ? 560 : undefined} expanded />
+                                    <div ref={expandedChartRef}><ChartContent {...chartContentProps} height={500} maxHeight={maxHeight ? 560 : undefined} showPoints={showPoints} /></div>
+                                    {table}
                                     {comment?.text && (
-                                        <div className="mt-4 flex gap-2 rounded-lg bg-secondary p-3">
+                                        <div className="mt-4 flex items-start gap-2 rounded-lg bg-secondary p-3">
                                             <MessageChatSquare className="mt-0.5 size-4 shrink-0 text-brand-secondary" aria-hidden="true" />
-                                            <div className="flex flex-col gap-1">
+                                            <div className="flex flex-1 flex-col gap-1">
                                                 <p className="text-sm whitespace-pre-wrap text-secondary">{comment.text}</p>
                                                 <p className="text-xs text-tertiary">Bijgewerkt op {formatCommentDate(comment.updated_at)}</p>
                                             </div>
+                                            {commentEditor && (
+                                                <ChartCommentButton
+                                                    {...commentEditor}
+                                                    comment={comment}
+                                                    icon={Edit05}
+                                                    label="Notitie bewerken"
+                                                    className="-my-1 shrink-0"
+                                                />
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -229,6 +235,7 @@ export function ChartCard({
 }
 
 interface ChartContentProps {
+    title: string;
     data: Record<string, unknown>[];
     series: ChartSeries[];
     chartType: ChartType;
@@ -244,14 +251,16 @@ interface ChartContentProps {
     height?: number;
     maxHeight?: number;
     /**
-     * Drawn in the expand modal rather than in the card. `line` charts mark every point with a
-     * dot and print its figure beside it — worth the ink at full size, too dense for the card,
-     * where fourteen of these sit on a page at 300px each.
+     * Mark every point on a `line` or `area` chart with a dot and print its figure beside it.
+     * Only ever on in the expand modal, and only when the reader asks for it there: at card
+     * size — fourteen charts on a page at 300px each — the figures are a wall of ink, and even
+     * at full size they are a close-reading aid rather than how the chart is first met.
      */
-    expanded?: boolean;
+    showPoints?: boolean;
 }
 
 export function ChartContent({
+    title,
     data,
     series,
     chartType,
@@ -264,7 +273,7 @@ export function ChartContent({
     totals,
     height = 300,
     maxHeight,
-    expanded = false,
+    showPoints = false,
 }: ChartContentProps) {
     const reversedSeries = [...series].reverse();
     const format = (value: unknown) => formatValue(value, valueFormat);
@@ -304,6 +313,37 @@ export function ChartContent({
 
     const isBarChart = chartType === "bar" || chartType === "horizontal-bar";
 
+    // The share a stacked segment is of its own bar. Only where a bar actually *is* a stack:
+    // one series is 100% of itself, which is not information. Never on a normalised chart,
+    // where the value drawn already is the share, and not on `line` or `area`, where the series
+    // are alternatives at a point on the axis rather than parts of one whole.
+    const showsShare = isBarChart && !normalize && series.length > 1 && valueFormat !== "percent";
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tooltipFormat = (value: unknown, _name?: unknown, entry?: any) => {
+        const bedrag = formatTooltipValue(value, valueFormat);
+        if (!showsShare) return bedrag;
+
+        // The row is read off the tooltip entry rather than looked up in `totals` by index:
+        // ChartTooltipContent hands the formatter an entry on both of its paths, but the index
+        // it passes is the entry's position within the tooltip payload — 0 for every stacked
+        // bar — and not the row's. Summing the row's own segments needs no index at all.
+        //
+        // It costs the difference between that sum and the independently measured `totals`,
+        // which is half a cent per segment now that the backend carries cents, and so cannot
+        // show at two decimals. In exchange the shares over one bar add to exactly 100%, which
+        // is what a reader hovering each segment in turn is checking.
+        //
+        // A negative segment is left without a share (see formatShare) while the positive ones
+        // beside it keep theirs, against a total its own sign has pulled down — so those can
+        // read over 100%. That is arithmetically true and visible in the bar itself; dropping
+        // every share on the bar because one segment went negative would surprise more.
+        const rij = entry?.payload as Record<string, unknown> | undefined;
+        const totaal = series.reduce((sum, serie) => sum + (Number(rij?.[serie.key]) || 0), 0);
+        const aandeel = formatShare(Number(value) || 0, totaal);
+        return aandeel ? `${bedrag} (${aandeel})` : bedrag;
+    };
+
     const tooltip = (
         <Tooltip
             // A bar stacks its series into one column, and the segment under the pointer is
@@ -311,7 +351,7 @@ export function ChartContent({
             // is read the other way round: the series are compared at that point on the axis,
             // so those keep the shared tooltip.
             shared={!isBarChart}
-            content={<ChartTooltipContent formatter={format} showSeriesName={isBarChart} labelKey={xAxisKey} />}
+            content={<ChartTooltipContent formatter={tooltipFormat} showSeriesName={isBarChart} labelKey={xAxisKey} />}
             cursor={isBarChart ? { fill: "var(--color-bg-secondary)", radius: 4 } : { stroke: "var(--color-border-secondary)" }}
         />
     );
@@ -351,9 +391,15 @@ export function ChartContent({
                         className="flex-wrap gap-x-4 gap-y-1"
                     />
                 )}
-                <div className={cx(scrolls && "overflow-y-auto")} style={scrolls ? { height: maxHeight } : undefined}>
+                <div
+                    className={cx(scrolls && "overflow-y-auto rounded-sm outline-focus-ring focus-visible:outline-2 focus-visible:-outline-offset-2")}
+                    style={scrolls ? { height: maxHeight } : undefined}
+                    role={scrolls ? "region" : undefined}
+                    aria-label={scrolls ? `${title}: grafiek scrollen` : undefined}
+                    tabIndex={scrolls ? 0 : undefined}
+                >
                     <ResponsiveContainer width="100%" height={barHeight}>
-                        <BarChart data={rows} layout="vertical" barCategoryGap="20%" margin={{ left: 10, right: normalize ? 16 : 60 }}>
+                        <BarChart accessibilityLayer={false} aria-hidden="true" tabIndex={-1} data={rows} layout="vertical" barCategoryGap="20%" margin={{ left: 10, right: normalize ? 16 : 60 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-tertiary)" horizontal={false} />
                             <YAxis dataKey={xAxisKey} type="category" {...sharedAxisProps} width={120} />
                             {/* Pinned to 0–100 when normalised, with the ticks named rather than
@@ -387,8 +433,6 @@ export function ChartContent({
                                             const numValue = Number(value) || 0;
                                             const segmentRatio = numValue / maxTotal;
                                             if (segmentRatio < 0.06 || (width as number) < 45) return null;
-                                            // The figure is white on the segment's own fill;
-                                            // once that fill fades it has nothing to sit on.
                                             if (isDimmed(s.key)) return null;
                                             return (
                                                 <text
@@ -448,19 +492,23 @@ export function ChartContent({
 
     // Percent ticks stay whole — `format` would spend two decimals on every one of them.
     // Euro ticks are signed on `line` and `area`, the two where the y-axis carries the figure
-    // being read. Not on the bars: `horizontal-bar` spends its y-axis on the categorie names,
-    // and signing those would put a € in front of a taakveld. `index` carries no unit, so its
-    // ticks are left bare.
+    // being read — `euro-compact` among them, or absolute bedragen would print their ten digits
+    // raw down the axis instead of reading "€ 25 mln.". Not on the bars: `horizontal-bar` spends
+    // its y-axis on the categorie names, and signing those would put a € in front of a taakveld.
+    // `index` carries no unit, so its ticks are left bare.
     const yAxisTickFormatter =
         valueFormat === "percent"
             ? (value: unknown) => `${value}%`
-            : valueFormat === "euro" && (chartType === "line" || chartType === "area")
+            : (valueFormat === "euro" || valueFormat === "euro-compact") && (chartType === "line" || chartType === "area")
               ? (value: unknown) => format(value)
               : undefined;
 
     const yAxis = (
         <YAxis
             {...sharedAxisProps}
+            // A signed tick outgrows the 60px recharts reserves by default and is cut off at the
+            // left edge of the card; `auto` measures the widest one instead.
+            width={yAxisTickFormatter ? "auto" : undefined}
             tickFormatter={yAxisTickFormatter}
             label={
                 yAxisLabel ? { value: yAxisLabel, angle: -90, position: "insideLeft", offset: 10, fontSize: 12, fill: "var(--color-text-tertiary)" } : undefined
@@ -470,14 +518,14 @@ export function ChartContent({
 
     const grid = <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-tertiary)" vertical={false} />;
 
-    // The two trend shapes — `line` and `area` — mark every point and print its figure once
-    // expanded. Shared between them because they are the same chart to read: a handful of years
-    // across a few cohorts, where the question is what a given year actually was.
+    // The two trend shapes — `line` and `area` — mark every point and print its figure once the
+    // reader turns the figures on. Shared between them because they are the same chart to read:
+    // a handful of years across a few cohorts, where the question is what a given year was.
     //
     // Which series runs highest at each point decides whether its figure goes above the line or
     // below, so that two series meeting — the moment the chart is read most closely — do not
     // stack their labels on one another.
-    const hoogsteReeks = expanded
+    const hoogsteReeks = showPoints
         ? data.map((entry) => {
               let hoogste: string | undefined;
               let waarde = -Infinity;
@@ -492,22 +540,28 @@ export function ChartContent({
           })
         : [];
 
-    const puntDot = (s: ChartSeries) => (expanded ? { r: 3.5, fill: s.color, strokeWidth: 0, fillOpacity: isDimmed(s.key) ? 0.2 : 1 } : false);
+    const puntDot = (s: ChartSeries) => (showPoints ? { r: 3.5, fill: s.color, strokeWidth: 0, fillOpacity: isDimmed(s.key) ? 0.2 : 1 } : false);
 
     const puntLabels = (s: ChartSeries) =>
-        expanded ? (
+        showPoints ? (
             <LabelList
                 dataKey={s.key}
                 content={({ x, y, index, value }) => {
                     // A gap in the series — a cohort with no filing that year — has a dot at no
                     // point, so it gets no figure either.
                     if (value === null || value === undefined) return null;
-                    const boven = hoogsteReeks[index ?? 0] === s.key;
+                    const positie = index ?? 0;
+                    const boven = hoogsteReeks[positie] === s.key;
+                    // The first and last points sit on the edges of the plot area, so a figure
+                    // centred on them hangs half outside it and is cut off by the container —
+                    // "€ 3.657" ends up reading "€ 3.65". Those two turn inward instead, and
+                    // grow into the chart rather than over its edge.
+                    const uitlijning = positie === 0 ? "start" : positie === data.length - 1 ? "end" : "middle";
                     return (
                         <text
                             x={x as number}
                             y={(y as number) + (boven ? -12 : 20)}
-                            textAnchor="middle"
+                            textAnchor={uitlijning}
                             fill="var(--color-text-tertiary)"
                             fillOpacity={isDimmed(s.key) ? 0.2 : 1}
                             fontSize={12}
@@ -521,12 +575,12 @@ export function ChartContent({
 
     // Room above for the topmost label, which sits outside the plot area and would otherwise be
     // clipped by the container.
-    const trendMargin = expanded ? { top: 24, right: 16, bottom: 5, left: 5 } : undefined;
+    const trendMargin = showPoints ? { top: 24, right: 16, bottom: 5, left: 5 } : undefined;
 
     if (chartType === "line") {
         return (
             <ResponsiveContainer width="100%" height={height}>
-                <LineChart data={data} margin={trendMargin}>
+                <LineChart accessibilityLayer={false} aria-hidden="true" tabIndex={-1} data={data} margin={trendMargin}>
                     {grid}
                     {xAxis}
                     {yAxis}
@@ -556,7 +610,7 @@ export function ChartContent({
     if (chartType === "bar") {
         return (
             <ResponsiveContainer width="100%" height={height}>
-                <BarChart data={data} barCategoryGap="20%">
+                <BarChart accessibilityLayer={false} aria-hidden="true" tabIndex={-1} data={data} barCategoryGap="20%">
                     {grid}
                     {xAxis}
                     {yAxis}
@@ -580,7 +634,7 @@ export function ChartContent({
 
     return (
         <ResponsiveContainer width="100%" height={height}>
-            <AreaChart data={data} margin={trendMargin}>
+            <AreaChart accessibilityLayer={false} aria-hidden="true" tabIndex={-1} data={data} margin={trendMargin}>
                 {grid}
                 {xAxis}
                 {yAxis}

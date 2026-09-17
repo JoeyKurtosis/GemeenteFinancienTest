@@ -1,6 +1,7 @@
 import type { Key, Selection } from "react-aria-components";
 import { Button } from "@/components/base/buttons/button";
 import { MultiSelect } from "@/components/base/select/multi-select";
+import { Select } from "@/components/base/select/select";
 import { RangeSlider } from "@/components/base/slider/range-slider";
 import { type FilterOption, type GemeenteOption, useFilters } from "@/features/filters";
 import type { ReferentiegroepSamenstelling } from "../hooks/use-referentiegroep-samenstelling";
@@ -108,7 +109,7 @@ interface ReferentiegroepFilterBarProps {
 }
 
 export function ReferentiegroepFilterBar({ samenstelling }: ReferentiegroepFilterBarProps) {
-    const { options, isLoading } = useFilters();
+    const { options, isLoading, selectedGemeente, onGemeenteChange } = useFilters();
     const {
         provincies,
         onProvinciesChange,
@@ -135,8 +136,27 @@ export function ReferentiegroepFilterBar({ samenstelling }: ReferentiegroepFilte
     return (
         <div className="flex flex-wrap items-end gap-6 rounded-[12px] bg-secondary p-5">
             <div className="w-full max-w-56">
+                <Select.ComboBox
+                    label="Jouw gemeente"
+                    placeholder={isLoading ? "Laden..." : "Zoek gemeente..."}
+                    size="sm"
+                    shortcut={false}
+                    isDisabled={isLoading}
+                    items={options.gemeenten}
+                    selectedKey={selectedGemeente}
+                    onSelectionChange={onGemeenteChange}
+                >
+                    {(item) => (
+                        <Select.Item id={item.id} label={item.label}>
+                            {item.label}
+                        </Select.Item>
+                    )}
+                </Select.ComboBox>
+            </div>
+
+            <div className="w-full max-w-56">
                 {/* Select only, no search — the five size classes fit on screen. */}
-                <MultiSelect label="Inwonersaantalgroep" size="sm" isDisabled={isLoading} showSearch={false} showFooter={false} {...inwonergroep}>
+                <MultiSelect label="Grootteklasse" size="sm" isDisabled={isLoading} showSearch={false} showFooter={false} {...inwonergroep}>
                     {(item) => (
                         <MultiSelect.Item id={item.id} label={item.label} selectionIndicator="checkbox">
                             {item.label}
@@ -148,13 +168,7 @@ export function ReferentiegroepFilterBar({ samenstelling }: ReferentiegroepFilte
             <div className="w-full max-w-40">
                 {/* Bounds come from the year's own gemeenten rather than fixed numbers: the list
                     changes per year, and the figures that used to sit here matched no year. */}
-                <RangeSlider
-                    label="Inwonersaantal"
-                    minValue={grenzen[0]}
-                    maxValue={grenzen[1]}
-                    value={inwonersaantal}
-                    onChange={onInwonersaantalChange}
-                />
+                <RangeSlider label="Inwonersaantal" minValue={grenzen[0]} maxValue={grenzen[1]} value={inwonersaantal} onChange={onInwonersaantalChange} />
             </div>
 
             <div className="w-full max-w-56">
@@ -177,8 +191,8 @@ export function ReferentiegroepFilterBar({ samenstelling }: ReferentiegroepFilte
                 </MultiSelect>
             </div>
 
-            {/* The page composes a group and hands it over here, and only here. Reset undoes the
-                composing; it does not apply anything, and it leaves the rest of the dashboard's
+            {/* The page composes a group and hands it over here, and only here. Reset restores
+                all page filters and the selection to Alles; it leaves the rest of the dashboard's
                 filters — gemeente, jaar, verslagsoort — where the user put them. */}
             <div className="ml-auto flex gap-3">
                 <Button color="secondary" size="sm" onClick={herstel}>

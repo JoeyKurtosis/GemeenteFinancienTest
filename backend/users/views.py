@@ -6,13 +6,14 @@ from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model, login, logout, update_session_auth_hash
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .email import send_password_reset_email, send_two_factor_code_email, send_welcome_email
+from .email import send_account_deleted_email, send_password_reset_email, send_two_factor_code_email, send_welcome_email
 from .models import PasswordResetToken, TwoFactorCode, UserProfile
 
 SPECIAL_CHAR_REGEX = re.compile(r"[^A-Za-z0-9]")
@@ -40,6 +41,33 @@ def serialize_user(user):
 def _clear_pending_two_factor(request):
     request.session.pop("pending_2fa_user_id", None)
     request.session.pop("pending_2fa_code_id", None)
+
+
+def _issue_two_factor_code(request, user):
+    """Expire any outstanding code, mail a fresh one and park the challenge in the session.
+
+    Shared by the three entry points that start a code exchange: login, signup and resend.
+    """
+    TwoFactorCode.objects.filter(user=user, status="pending").update(status="expired")
+    two_factor_code = TwoFactorCode.objects.create(
+        user=user,
+        code=f"{secrets.randbelow(1000000):06d}",
+        status="pending",
+    )
+    request.session["pending_2fa_user_id"] = user.id
+    request.session["pending_2fa_code_id"] = two_factor_code.id
+    send_two_factor_code_email(user.email, two_factor_code.code)
+    return two_factor_code
+
+
+def _is_email_verified(user):
+    """Whether this user has proven their address.
+
+    Profiles are only created by SignupView, so superusers and admin-created accounts have none.
+    Those count as verified: they were not created through the flow that asks for proof.
+    """
+    profile = getattr(user, "profile", None)
+    return profile is None or profile.email_verified
 
 
 class LoginView(APIView):
@@ -78,24 +106,23 @@ class LoginView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # Check if 2FA is enabled for this user (admins have 2FA enabled)
-        requires_two_factor = getattr(settings, "TWO_FACTOR_ENABLED", False)
+        # A deployment-wide switch, not a per-user one: TWO_FACTOR_ENABLED applies to everybody
+        # who logs in. See settings.py. An address that was never confirmed at signup has to be
+        # confirmed here regardless, which is also how an abandoned signup gets a second chance:
+        # the code is re-issued rather than the login dead-ending.
+        email_verified = _is_email_verified(user)
+        requires_two_factor = settings.TWO_FACTOR_ENABLED or not email_verified
 
         if requires_two_factor:
-            _clear_pending_two_factor(request)
-            TwoFactorCode.objects.filter(user=user, status="pending").update(status="expired")
-            two_factor_code = TwoFactorCode.objects.create(
-                user=user,
-                code=f"{secrets.randbelow(1000000):06d}",
-                status="pending",
-            )
-            request.session["pending_2fa_user_id"] = user.id
-            request.session["pending_2fa_code_id"] = two_factor_code.id
-            send_two_factor_code_email(user.email, two_factor_code.code)
+            _issue_two_factor_code(request, user)
             return Response(
                 {
                     "requires_2fa": True,
-                    "detail": "2FA code vereist. Controleer je e-mail.",
+                    "detail": (
+                        "Bevestig je e-mailadres. We hebben je een code gestuurd."
+                        if not email_verified
+                        else "2FA code vereist. Controleer je e-mail."
+                    ),
                     "expires_in_seconds": TWO_FACTOR_CODE_EXPIRY_MINUTES * 60,
                 },
                 status=status.HTTP_202_ACCEPTED,
@@ -144,7 +171,9 @@ class TwoFactorVerifyView(APIView):
         if expires_at <= timezone.now():
             two_factor_code.status = "expired"
             two_factor_code.save(update_fields=["status"])
-            _clear_pending_two_factor(request)
+            # The challenge stays in the session on purpose, so "genereer opnieuw" still works
+            # from here. It only names the user, and resend re-expires and re-issues anyway —
+            # the wrong-code branch below has always left it in place for the same reason.
             return Response(
                 {"detail": "De 2FA code is verlopen."},
                 status=status.HTTP_410_GONE,
@@ -159,6 +188,18 @@ class TwoFactorVerifyView(APIView):
         login(request, user)
         two_factor_code.status = "verified"
         two_factor_code.save(update_fields=["status"])
+
+        # The False -> True transition is the only signal needed to tell a signup confirmation
+        # apart from an ordinary login 2FA, so neither the code nor the session has to carry an
+        # intent. It also means the welcome mail goes out exactly once, at the moment the address
+        # is actually proven, rather than to whatever was typed into the signup form.
+        profile = getattr(user, "profile", None)
+        if profile is not None and not profile.email_verified:
+            profile.email_verified = True
+            profile.save(update_fields=["email_verified"])
+            origin = request.META.get("HTTP_ORIGIN", "http://localhost:5173")
+            send_welcome_email(user.email, user.first_name, f"{origin}/login")
+
         _clear_pending_two_factor(request)
         return Response(serialize_user(user))
 
@@ -183,14 +224,7 @@ class TwoFactorResendView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        TwoFactorCode.objects.filter(user=user, status="pending").update(status="expired")
-        two_factor_code = TwoFactorCode.objects.create(
-            user=user,
-            code=f"{secrets.randbelow(1000000):06d}",
-            status="pending",
-        )
-        request.session["pending_2fa_code_id"] = two_factor_code.id
-        send_two_factor_code_email(user.email, two_factor_code.code)
+        _issue_two_factor_code(request, user)
         return Response(
             {
                 "detail": "Nieuwe 2FA code verstuurd naar je e-mail.",
@@ -278,6 +312,61 @@ class ChangePasswordView(APIView):
         return Response(status=status.HTTP_200_OK)
 
 
+class DeleteAccountView(APIView):
+    """Permanently remove the signed-in account.
+
+    Everything hanging off the user is CASCADE'd away by the database: the profile, outstanding
+    2FA codes, password reset tokens and chart comments. The avatar is the one thing that is not —
+    Django drops the row and leaves the uploaded file in MEDIA_ROOT — so it is deleted by hand
+    first. Support requests are deliberately untouched: they carry a free-text email rather than a
+    link to the account, and they are correspondence with the team rather than account data.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        password = request.data.get("password", "")
+
+        if not password:
+            return Response(
+                {"detail": "Wachtwoord is verplicht."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # This endpoint cannot tell whether it is about to remove the last account that can reach
+        # /admin/, so it never removes one at all. Deleting a beheerder stays a deliberate action
+        # taken from the admin, not something self-service can do by accident.
+        if user.is_staff or user.is_superuser:
+            return Response(
+                {"detail": "Beheerdersaccounts kunnen niet via deze pagina worden verwijderd."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if not user.check_password(password):
+            return Response(
+                {"detail": "Wachtwoord is onjuist."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        recipient_email = user.email
+        name = user.first_name or user.username
+
+        profile = getattr(user, "profile", None)
+        if profile is not None and profile.avatar:
+            profile.avatar.delete(save=False)
+
+        logout(request)
+        _clear_pending_two_factor(request)
+        user.delete()
+
+        # After the delete, never before: send_account_deleted_email swallows its own failures, so
+        # mailing first would risk confirming a deletion that then fell over.
+        send_account_deleted_email(recipient_email, name)
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
 class SignupView(APIView):
     permission_classes = [AllowAny]
 
@@ -292,8 +381,19 @@ class SignupView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # The address becomes both email and username and is about to be mailed a code, so it has
+        # to at least be shaped like an address. Whether it actually exists is what the code proves.
+        try:
+            validate_email(email)
+        except ValidationError:
+            return Response(
+                {"detail": "Vul een geldig e-mailadres in."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         User = get_user_model()
-        if User.objects.filter(email__iexact=email).exists():
+        existing = User.objects.filter(email__iexact=email).first()
+        if existing is not None and _is_email_verified(existing):
             return Response(
                 {"detail": "Er bestaat al een account met dit e-mailadres."},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -311,20 +411,37 @@ class SignupView(APIView):
         first_name = parts[0]
         last_name = parts[1] if len(parts) > 1 else ""
 
-        user = User.objects.create_user(
-            username=email,
-            email=email,
-            password=password,
-            first_name=first_name,
-            last_name=last_name,
+        if existing is not None:
+            # An unverified row is a signup nobody ever finished — the address has never been
+            # proven, so there is nothing to protect and no reason to let it squat the address.
+            # Take it over rather than dead-ending the person trying to register.
+            user = existing
+            user.first_name = first_name
+            user.last_name = last_name
+            user.set_password(password)
+            user.save(update_fields=["first_name", "last_name", "password"])
+        else:
+            user = User.objects.create_user(
+                username=email,
+                email=email,
+                password=password,
+                first_name=first_name,
+                last_name=last_name,
+            )
+            UserProfile.objects.create(user=user, email_verified=False)
+
+        # Independent of settings.TWO_FACTOR_ENABLED: that switch is about login security, this is
+        # about whether the address is real. Turning 2FA off does not turn signup confirmation off.
+        # The welcome mail waits until the code is verified — see TwoFactorVerifyView.
+        _issue_two_factor_code(request, user)
+        return Response(
+            {
+                "requires_2fa": True,
+                "detail": "Bevestig je e-mailadres. We hebben je een code gestuurd.",
+                "expires_in_seconds": TWO_FACTOR_CODE_EXPIRY_MINUTES * 60,
+            },
+            status=status.HTTP_202_ACCEPTED,
         )
-        UserProfile.objects.create(user=user)
-
-        origin = request.META.get("HTTP_ORIGIN", "http://localhost:5173")
-        send_welcome_email(user.email, first_name, f"{origin}/login")
-
-        login(request, user)
-        return Response(serialize_user(user), status=status.HTTP_201_CREATED)
 
 
 class PasswordResetRequestView(APIView):

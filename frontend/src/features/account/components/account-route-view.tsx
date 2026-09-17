@@ -3,6 +3,7 @@ import { Tabs } from "@/components/application/tabs/tabs";
 import { useAuth } from "@/features/auth";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { AccountHeader } from "./account-header";
+import { DeleteAccountSection } from "./delete-account-section";
 import { NotesSection } from "./notes-section";
 import { PasswordSection } from "./password-section";
 import { ProfileSection } from "./profile-section";
@@ -30,6 +31,7 @@ export function AccountRouteView() {
                     <div className="flex flex-col">
                         <ProfileSection />
                         <PasswordSection />
+                        <DeleteAccountSection />
                     </div>
                 </Tabs.Panel>
 

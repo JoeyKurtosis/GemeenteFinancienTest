@@ -5,7 +5,8 @@ from .models import PasswordResetToken, TwoFactorCode, UserProfile
 
 @admin.register(UserProfile)
 class UserProfileAdmin(admin.ModelAdmin):
-    list_display = ("user", "phone_number", "created_at")
+    list_display = ("user", "phone_number", "email_verified", "created_at")
+    list_filter = ("email_verified",)
 
 
 @admin.register(PasswordResetToken)

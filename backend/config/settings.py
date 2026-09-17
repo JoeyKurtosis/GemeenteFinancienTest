@@ -4,6 +4,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from config.database import get_default_database, get_iv3_database
+from config.secrets import read_secret
 
 load_dotenv()
 
@@ -13,7 +14,13 @@ SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-change-me-in-production")
 
 DEBUG = os.getenv("DEBUG", "True").lower() in ("true", "1", "yes")
 
-ALLOWED_HOSTS = [h for h in os.getenv("ALLOWED_HOSTS", "*").split(",") if h]
+DEVMODE = os.getenv("DEVMODE", "True").lower() in ("true", "1", "yes")
+
+ALLOWED_HOSTS = [
+    "gemeentefinancien.test.kurtosis.nl",
+    "localhost",
+    "127.0.0.1",
+] 
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -41,8 +48,6 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    # Last, so it clears the iv3 bridges' caches as late as possible before the view runs —
-    # nothing above it reads them. See iv3/middleware.py.
     "iv3.middleware.Iv3RequestCacheMiddleware",
 ]
 
@@ -65,20 +70,23 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
-# `iv3` is a developer-only alias and inert in production: nothing but the sync_iv3_summary
-# command ever opens a cursor on it, Django connects lazily, and get_iv3_database() defaults
-# every setting — so with IV3_DB_* unset the entry costs nothing and connects to nothing.
-# Deployments serve the whole dashboard out of `default`; see iv3/models.py.
 DATABASES = {
     "default": get_default_database(),
     "iv3": get_iv3_database(),
 }
+if not DEVMODE:
+    DB_SECRET = read_secret("test/iv3/PostgreSQL")
+    DATABASES["default"] = {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": DB_SECRET["dbname"],
+        "USER": DB_SECRET["username"],
+        "PASSWORD": DB_SECRET["password"],
+        "HOST": DB_SECRET["host"],
+        "PORT": DB_SECRET.get("port", "5432"),
+    }
 
 DATABASE_ROUTERS = ["config.routers.Iv3Router"]
 
-# Per-process and deliberately so. Django's implicit default is already LocMemCache, so this
-# changes no behaviour — it is here to say the choice out loud, and to pin a LOCATION before a
-# second consumer arrives and shares one by accident.
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
@@ -115,6 +123,7 @@ FRONTEND_ORIGINS = [
     "http://localhost:5173",
     "http://localhost:5174",
     "http://127.0.0.1:5173",
+    "https://gemeentefinancien.test.kurtosis.nl"
 ] + _extra_origins
 CORS_ALLOWED_ORIGINS = FRONTEND_ORIGINS
 CSRF_TRUSTED_ORIGINS = FRONTEND_ORIGINS
@@ -128,51 +137,37 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
-    # Used only by the chat endpoint, which attaches both throttles per-view. The burst rate
-    # stops a runaway client; the daily rate is the cost ceiling on a paid upstream API.
-    #
-    # Counters live in CACHES, which is LocMemCache and therefore per-process, so N gunicorn
-    # workers give roughly N times these rates. Set them against the budget accordingly.
     "DEFAULT_THROTTLE_RATES": {
         "chat_burst": "10/min",
         "chat_daily": "200/day",
     },
 }
 
-# Chat assistant
-#
-# Google's Gemini API, reached through its OpenAI-compatibility endpoint so the proxy in
-# chat/views.py and the frontend adapter both stay OpenAI-shaped. The key is read here and
-# used only server-side — it must never be exposed to the browser, which is the whole reason
-# /api/chat/ exists rather than the frontend calling Google directly.
-#
-# Unset is a supported state: the endpoint returns 503 with a Dutch message and the rest of the
-# dashboard is unaffected.
-#
-# gemini-2.5-flash has a free tier and predates the Gemini 3 "thought signatures" that break
-# stateless tool-calling loops like ours. Moving to a 3.x model is an env-var change, but
-# re-test tool calling when you do.
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest")
-# No trailing slash: chat/views.py appends "/chat/completions".
-GEMINI_BASE_URL = os.getenv(
-    "GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai"
-)
+# Two-factor authentication
+TWO_FACTOR_ENABLED = False
+
+# AWS is also used by database-secret loading; it is not assistant-specific.
+AWS_REGION = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION") or "eu-central-1"
+
+# Answer engine. Production deliberately has no implicit test-service fallback.
+ANSWER_ENGINE_BASE_URL = os.getenv(
+    "ANSWER_ENGINE_BASE_URL",
+    "https://test.kurtosis.justavoidhumans.com" if DEBUG else "",
+).rstrip("/")
+ANSWER_ENGINE_PACK = os.getenv("ANSWER_ENGINE_PACK", "kurtosis-gf")
 
 # Email
-DEFAULT_FROM_EMAIL = "noreply@gemeentefinancien.nl"
-if DEBUG:
-    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+DEFAULT_FROM_EMAIL =  os.getenv("DEFAULT_FROM_EMAIL", "")
+EMAIL_SECRET_NAME = "" if DEVMODE else os.getenv("EMAIL_SECRET_NAME", "")
+EMAIL_USE_TLS = True
+EMAIL_TIMEOUT = 30
+
+if EMAIL_SECRET_NAME:
+    EMAIL_BACKEND = "config.email.SesSmtpEmailBackend"
 else:
-    EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django_ses.SESBackend")
-    # AWS SES settings (used when EMAIL_BACKEND is django_ses.SESBackend)
-    AWS_SES_REGION_NAME = os.getenv("AWS_SES_REGION_NAME", "eu-west-1")
-    AWS_SES_REGION_ENDPOINT = os.getenv(
-        "AWS_SES_REGION_ENDPOINT",
-        f"email.{AWS_SES_REGION_NAME}.amazonaws.com",
-    )
-    # AWS credentials are resolved from the instance/task IAM role by default.
-    # Set AWS_SES_ACCESS_KEY_ID and AWS_SES_SECRET_ACCESS_KEY to override.
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # Production security
 if not DEBUG:
@@ -182,4 +177,3 @@ if not DEBUG:
     SECURE_HSTS_PRELOAD = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

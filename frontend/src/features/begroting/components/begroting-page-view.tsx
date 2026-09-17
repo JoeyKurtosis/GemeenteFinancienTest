@@ -1,26 +1,32 @@
+import type { ReactNode } from "react";
 import { ChartCard } from "@/components/charts/chart-card";
 import { ResultCard } from "@/components/charts/result-card";
-import { type SectionTab, SectionTabs } from "@/components/layout/section-tabs";
 import { useChartComments } from "@/features/comments";
 import type { BegrotingWeergave } from "../api";
 import { useBegroting } from "../hooks/use-begroting";
 import { begrotingPagina } from "./begroting-charts";
 
-const begrotingTabs: SectionTab[] = [
-    { label: "Begroting versus Jaarrekening (per inwoner)", href: "/begroting/begroting-vs-jaarrekening-per-inwoner" },
-    { label: "Begroting versus Jaarrekening (absolute bedragen)", href: "/begroting/begroting-vs-jaarrekening-absolute-bedragen" },
-];
-
 /**
- * Shared layout for every Begroting page: the section tabs, then a 2-column grid of the
+ * Shared layout for both Begroting pages: an optional row above a 2-column grid of the
  * Resultaat table, the uitgaven line, and the stacked bars.
  *
- * The three pages are one layout over a different comparison, and `weergave` is the whole of
- * the difference — it travels to the backend, which swaps the category axis and the measure
- * and hands back the same seven cards either way. The grid flows them into rows of two.
+ * In één oogopslag and Begroting versus Jaarrekening are one layout over a different
+ * comparison, and `weergave` is the whole of the difference — it travels to the backend, which
+ * swaps the category axis and the measure and hands back the same seven cards either way. The
+ * grid flows them into rows of two.
+ *
+ * `header` is what the page puts above that grid — the weergave toggle on the comparison page,
+ * nothing on the overview.
  */
-export function BegrotingPageView({ weergave }: { weergave: BegrotingWeergave }) {
+export function BegrotingPageView({ weergave, header }: { weergave: BegrotingWeergave; header?: ReactNode }) {
     const { data, isLoading, error } = useBegroting(weergave);
+
+    const pagina = begrotingPagina(weergave, data);
+
+    // Boven de foutafhandeling: een hook die pas na een `return` wordt aangeroepen verandert het
+    // aantal hooks zodra een fout komt of gaat, en daar breekt React op.
+    const allChartIds = [`begroting:${pagina.uitgavenPerJaar.title}`, ...pagina.kaarten.map((k) => `begroting:${k.title}`)];
+    const { commentsMap, invalidate } = useChartComments(allChartIds);
 
     if (error) {
         return (
@@ -31,14 +37,9 @@ export function BegrotingPageView({ weergave }: { weergave: BegrotingWeergave })
         );
     }
 
-    const pagina = begrotingPagina(weergave, data);
-
-    const allChartIds = [`begroting:${pagina.uitgavenPerJaar.title}`, ...pagina.kaarten.map((k) => `begroting:${k.title}`)];
-    const { commentsMap, invalidate } = useChartComments(allChartIds);
-
     return (
         <section className="flex flex-col gap-6">
-            <SectionTabs items={begrotingTabs} />
+            {header}
             <div className="grid gap-6 lg:grid-cols-2">
                 <ResultCard title="Resultaat" rows={pagina.resultaat} isLoading={isLoading} />
                 <ChartCard

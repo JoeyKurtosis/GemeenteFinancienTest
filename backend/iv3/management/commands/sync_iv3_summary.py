@@ -1,16 +1,27 @@
 """Build the app's iv3 tables out of the IV3 warehouse.
 
-**Developer command — this is not deployed and never runs in production.** It is the only
-thing in the project that reaches the warehouse, and it needs IV3_DB_* pointed at it. The
-deployed app reads nothing but its own database; see load_iv3_data.
+**Developer command.** It is the only thing in the project that reaches the warehouse, and it
+runs wherever the warehouse is reachable — which in practice means inside AWS. The deployed
+dashboard reads nothing but its own database; see load_iv3_data.
 
 Takes a few minutes: it reads a few million rows per (jaar, verslagsoort) out of a 151M-row
 table. That is precisely why it exists — the dashboard cannot do this per request, and the
 warehouse grant is SELECT-only so a materialised view is not an option. It only has to run
 when CBS publishes, which is about once a year.
 
-    python manage.py sync_iv3_summary            # every year
-    python manage.py sync_iv3_summary --jaar 2024
+    AWS_REGION=eu-central-1 IV3_DB_SECRET_NAME=dev/iv3/PostgreSQL \\
+        python manage.py sync_iv3_summary            # every year
+    ... python manage.py sync_iv3_summary --jaar 2024
+
+The credentials come out of that Secrets Manager secret, so the instance/task role needs
+secretsmanager:GetSecretValue on it; boto3 finds the AWS credentials from the role itself.
+From a laptop there is no such role, so set IV3_DB_HOST/_USER/_PASSWORD/_NAME/_PORT in .env
+instead — together they win over IV3_DB_SECRET_NAME and no AWS call is made:
+
+    IV3_DB_HOST=dev.kurtosis.nl IV3_DB_USER=... IV3_DB_PASSWORD=... IV3_DB_NAME=iv3 \\
+        python manage.py sync_iv3_summary --jaar 2024
+
+Either way this command resolves them — settings.py leaves the alias unconfigured on purpose.
 
 Then ship what it built:
 
@@ -22,6 +33,7 @@ import re
 from django.core.management.base import BaseCommand
 from django.db import connections, transaction
 
+from config.database import get_iv3_database
 from iv3 import definitions as d
 from iv3.models import Gemeente, Inwoners, Iv3Summary, Iv3Taakveld
 
@@ -85,8 +97,8 @@ ORDER BY 1
 # thousand.
 #
 # `bedrag` resolves the sentinel before anything sums it (definitions.GEEN_OPGAVE).
-# 2eplaatsing is the revised figure and the better populated of the two, so it wins
-# wherever CBS has published it.
+# 2eplaatsing is the revised figure and normally wins. For 2025 and 2026, a report whose
+# entire second placement is empty uses the first placement instead (see _gebruik_eerste).
 #
 # The `ELSE 0` cannot tell "reported nothing" from "reported a zero", so a gemeente that filed
 # no return at all still gets a summary row, with every amount at zero and its population
@@ -95,6 +107,14 @@ ORDER BY 1
 # the ~6.400 rows are like this. Fixing it here instead would mean writing no row at all, which
 # is a defensible shape but needs the warehouse and a regenerated fixture to land — the
 # query-side filter needs neither and reaches the data already shipped.
+_TWEEDE_PLAATSING_HEEFT_DATA = f"""
+SELECT EXISTS (
+    SELECT 1 FROM gemeenten_iv3
+    WHERE jaar = %(jaar)s AND verslagsoort = %(verslagsoort)s
+      AND "2eplaatsing" NOT IN (0, {d.GEEN_OPGAVE})
+)
+"""
+
 _AGGREGATE = f"""
 WITH feiten AS (
     SELECT
@@ -102,6 +122,7 @@ WITH feiten AS (
         trim(categorie)          AS categorie,
         trim(taakveldbalanspost) AS taakveld,
         CASE
+            WHEN %(gebruik_eerste)s AND "1eplaatsing" <> {d.GEEN_OPGAVE} THEN "1eplaatsing"
             WHEN "2eplaatsing" <> {d.GEEN_OPGAVE} THEN "2eplaatsing"
             WHEN "1eplaatsing" <> {d.GEEN_OPGAVE} THEN "1eplaatsing"
             ELSE 0
@@ -141,8 +162,8 @@ GROUP BY 1, 2, 3
 # Bounded by the same (jaar, verslagsoort) index, and cheap next to _AGGREGATE: the balansposten
 # are a small corner of the code space and only the passivazijde is read.
 #
-# `bedrag` resolves the sentinel exactly as _AGGREGATE does, by equality and 2eplaatsing first
-# (definitions.GEEN_OPGAVE) — a balanspost carries a correction like anything else, so a
+# `bedrag` resolves the sentinel exactly as _AGGREGATE does, using the same placement choice.
+# A balanspost carries a correction like anything else, so a
 # `> -99000` cutoff would delete real money here too.
 #
 # Ultimo, not Primo: the closing position is what a solvabiliteitsratio is read off. The L*/B*
@@ -153,6 +174,7 @@ WITH standen AS (
         trim(gemeenten)          AS gm_code,
         trim(taakveldbalanspost) AS post,
         CASE
+            WHEN %(gebruik_eerste)s AND "1eplaatsing" <> {d.GEEN_OPGAVE} THEN "1eplaatsing"
             WHEN "2eplaatsing" <> {d.GEEN_OPGAVE} THEN "2eplaatsing"
             WHEN "1eplaatsing" <> {d.GEEN_OPGAVE} THEN "1eplaatsing"
             ELSE 0
@@ -190,6 +212,7 @@ SELECT
     substr(trim(categorie), 2, 1) AS hoofdcategorie,
     sum(
         CASE
+            WHEN %(gebruik_eerste)s AND "1eplaatsing" <> {d.GEEN_OPGAVE} THEN "1eplaatsing"
             WHEN "2eplaatsing" <> {d.GEEN_OPGAVE} THEN "2eplaatsing"
             WHEN "1eplaatsing" <> {d.GEEN_OPGAVE} THEN "1eplaatsing"
             ELSE 0
@@ -228,6 +251,20 @@ class Command(BaseCommand):
         parser.add_argument("--jaar", type=int, help="Only refresh this year.")
 
     def handle(self, *args, **options):
+        # Point the alias at the real warehouse. settings.py leaves it a placeholder so that
+        # no web process pays a Secrets Manager call it has no use for, which makes this the
+        # one place the credentials are resolved — and it has to happen before the first
+        # connections["iv3"] touch, because Django reads connections.databases[alias] once,
+        # when it builds the connection wrapper. Every cursor in this file is opened below
+        # this line: _sync_gemeenten() next, warehouse_jaar_verslagsoort() after it, and the
+        # four _sync* helpers from within the loop.
+        #
+        # update(), not assignment: Django fills the per-alias defaults (TIME_ZONE, TEST,
+        # CONN_HEALTH_CHECKS, ...) once, when ConnectionHandler builds connections.databases
+        # out of settings.DATABASES. Replacing the entry with a bare dict drops them, and
+        # the first connect() then dies on KeyError: 'TIME_ZONE'.
+        connections.databases["iv3"].update(get_iv3_database(resolve_secret=True))
+
         # Before the rollups, and deliberately not scoped by --jaar: a gemeente's name is
         # read for every year on a chart's x-axis, not just the year being refreshed. Since
         # this rebuilds by delete-then-insert, honouring --jaar here would wipe the other
@@ -326,13 +363,13 @@ class Command(BaseCommand):
                 # hoofdtaakveld 0 draws those off their own column and needs a name for the slice,
                 # as the report does. 0.10 is kept for a plainer reason — it is a real taakveld,
                 # and the reservemutaties toggle decides per request whether it is drawn.
-                if code != _rol_taakveld_op(code) or not titel:
+                if code != _rol_taakveld_op(code, jaar) or not titel:
                     continue
                 namen[code] = titel
             per_jaar_namen[jaar] = namen
 
-        # A rolled-up parent often has no bare row in the year that uses it — 2026 books on
-        # 6.711..714 and never on 6.71 itself — but an older year named it. Newest year wins.
+        # Historical rolled-up parents can lack a bare row; an older year's name completes
+        # those. From 2025 the official child codes and their own names are retained instead.
         elders: dict[str, str] = {}
         for jaar in sorted(per_jaar_namen):
             for code, titel in per_jaar_namen[jaar].items():
@@ -365,6 +402,8 @@ class Command(BaseCommand):
         self, jaar: int, code: str, namen: dict[str, str], elders: dict[str, str]
     ) -> str | None:
         """What to call `code` in `jaar`: its own name, a completion, or another year's."""
+        if jaar in (2025, 2026) and code in d.TAAKVELD_NAMEN_VANAF_2025:
+            return d.TAAKVELD_NAMEN_VANAF_2025[code]
         eigen = namen.get(code)
         if eigen and not eigen.endswith(".."):
             return eigen
@@ -394,12 +433,16 @@ class Command(BaseCommand):
         return eigen
 
     def _sync(self, jaar: int, verslagsoort: str) -> tuple[int, int]:
+        gebruik_eerste = self._gebruik_eerste(jaar, verslagsoort)
+        if gebruik_eerste:
+            self.stdout.write(f"  {verslagsoort}: 2e plaatsing leeg, gebruik 1e plaatsing")
         with connections["iv3"].cursor() as cursor:
             cursor.execute(
                 _AGGREGATE,
                 {
                     "jaar": jaar,
                     "verslagsoort": verslagsoort,
+                    "gebruik_eerste": gebruik_eerste,
                     "resultaat": d.TAAKVELD_RESULTAAT,
                     "balanspost_re": f"^[{''.join(d.BALANSPOST_PREFIXES)}]",
                 },
@@ -440,9 +483,9 @@ class Command(BaseCommand):
         # wrong — see the Balans block in definitions.py. Left at zero, which is what a ratio
         # reads as "no figure".
         if verslagsoort.endswith(d.VERSLAGSOORT_JAARREKENING):
-            self._sync_balans(jaar, verslagsoort, summaries)
+            self._sync_balans(jaar, verslagsoort, summaries, gebruik_eerste)
 
-        self._sync_resultaat(jaar, verslagsoort, summaries)
+        self._sync_resultaat(jaar, verslagsoort, summaries, gebruik_eerste)
 
         with transaction.atomic():
             Iv3Summary.objects.filter(jaar=jaar, verslagsoort=verslagsoort).delete()
@@ -463,8 +506,18 @@ class Command(BaseCommand):
 
         return len(summaries), scheef
 
+    def _gebruik_eerste(self, jaar: int, verslagsoort: str) -> bool:
+        if jaar not in (2025, 2026):
+            return False
+        with connections["iv3"].cursor() as cursor:
+            cursor.execute(
+                _TWEEDE_PLAATSING_HEEFT_DATA,
+                {"jaar": jaar, "verslagsoort": verslagsoort},
+            )
+            return not cursor.fetchone()[0]
+
     def _sync_balans(
-        self, jaar: int, verslagsoort: str, summaries: dict[str, Iv3Summary]
+        self, jaar: int, verslagsoort: str, summaries: dict[str, Iv3Summary], gebruik_eerste: bool
     ) -> None:
         """Read the year's balansposten onto the rows _AGGREGATE has already built."""
         with connections["iv3"].cursor() as cursor:
@@ -473,6 +526,7 @@ class Command(BaseCommand):
                 {
                     "jaar": jaar,
                     "verslagsoort": verslagsoort,
+                    "gebruik_eerste": gebruik_eerste,
                     "ultimo": d.BALANS_CATEGORIE_ULTIMO,
                     "eigen_vermogen_re": d.BALANS_EIGEN_VERMOGEN_PREFIX,
                     "passiva_re": d.BALANS_PASSIVA_PREFIX,
@@ -500,7 +554,7 @@ class Command(BaseCommand):
             )
 
     def _sync_resultaat(
-        self, jaar: int, verslagsoort: str, summaries: dict[str, Iv3Summary]
+        self, jaar: int, verslagsoort: str, summaries: dict[str, Iv3Summary], gebruik_eerste: bool
     ) -> None:
         """Read taakveld 0.11's lasten onto the rows _AGGREGATE has already built.
 
@@ -513,6 +567,7 @@ class Command(BaseCommand):
                 {
                     "jaar": jaar,
                     "verslagsoort": verslagsoort,
+                    "gebruik_eerste": gebruik_eerste,
                     "resultaat": d.TAAKVELD_RESULTAAT,
                 },
             )
@@ -528,13 +583,10 @@ class Command(BaseCommand):
             )
 
 
-def _rol_taakveld_op(code: str) -> str:
-    """The taakveld a code's figures belong under: 6.71a and 6.711 both -> 6.71, 0.1 -> 0.1.
-
-    Drop a trailing letter, then keep two digits after the dot — the sociaal domein is the only
-    hoofdtaakveld that goes deeper, and it has numbered its children both ways. See
-    TAAKVELD_SUBCODE_SUFFIX for why the parents can absorb them without double-counting.
-    """
+def _rol_taakveld_op(code: str, jaar: int | None = None) -> str:
+    """Keep official codes from 2025; roll older lettered subcodes into their parents."""
+    if jaar is not None and jaar >= 2025:
+        return code
     hoofd, _, sub = code.partition(".")
     sub = re.sub(d.TAAKVELD_SUBCODE_SUFFIX, "", sub)[: d.TAAKVELD_SUBCODE_DIEPTE]
     return f"{hoofd}.{sub}" if sub else hoofd
@@ -642,10 +694,10 @@ def _accumulate(row: Iv3Summary, categorie: str, code: str, bedrag: float):
 
         # The two the Lasten pages read. Both partition the lasten — every euro reaches each
         # of them exactly once — which is the invariant _lasten_gaan_op checks.
-        taakveld = _rol_taakveld_op(code)
+        taakveld = _rol_taakveld_op(code, row.jaar)
         row.lasten_per_taakveld[taakveld] = row.lasten_per_taakveld.get(taakveld, 0.0) + bedrag
-        # The rolled-up code, not the raw one: TAAKVELD_LABELS_ZONDER_BRON names the stems
-        # (6.73, 6.75, …) that _rol_taakveld_op collects 6.73a and 6.751 into.
+        # Legacy diagnostic for authored parent labels through 2024. The official subcodes
+        # from 2025 do not enter this bucket.
         if taakveld in d.TAAKVELD_LABELS_ZONDER_BRON:
             row.naamloze_lasten_per_hoofdcategorie[hoofdcategorie] = (
                 row.naamloze_lasten_per_hoofdcategorie.get(hoofdcategorie, 0.0) + bedrag

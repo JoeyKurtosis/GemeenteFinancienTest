@@ -10,7 +10,6 @@ import {
     ComposerPrimitive,
     ErrorPrimitive,
     MessagePrimitive,
-    SuggestionPrimitive,
     ThreadPrimitive,
     type ToolCallMessagePartComponent,
     groupPartByType,
@@ -38,6 +37,9 @@ import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
 import { ToolGroupContent, ToolGroupRoot, ToolGroupTrigger } from "@/components/assistant-ui/tool-group";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { Button } from "@/components/ui/button";
+import { AnswerEngineDetails } from "@/features/assistant/components/answer-engine-details";
+import { useAssistantFeatures } from "@/features/assistant";
+import { useFilters } from "@/features/filters";
 import { cn } from "@/lib/utils";
 
 export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
@@ -59,6 +61,7 @@ export type ThreadComponents = {
 
 export type ThreadProps = {
     components?: ThreadComponents | undefined;
+    maxWidth?: string;
 };
 
 const EMPTY_COMPONENTS: ThreadComponents = {};
@@ -69,24 +72,24 @@ const ThreadComponentsContext = createContext<ThreadComponents>(EMPTY_COMPONENTS
 // the composer mounts centered. Loads after startup keep the docked layout.
 const isNewChatView = (s: AssistantState) => s.thread.messages.length === 0 && (!s.thread.isLoading || s.threads.isLoading);
 
-export const Thread: FC<ThreadProps> = ({ components = EMPTY_COMPONENTS }) => {
+export const Thread: FC<ThreadProps> = ({ components = EMPTY_COMPONENTS, maxWidth = "44rem" }) => {
     const isEmpty = useAuiState(isNewChatView);
 
     return (
         <ThreadComponentsContext.Provider value={components}>
-            <ThreadRoot isEmpty={isEmpty} />
+            <ThreadRoot isEmpty={isEmpty} maxWidth={maxWidth} />
         </ThreadComponentsContext.Provider>
     );
 };
 
-const ThreadRoot: FC<{ isEmpty: boolean }> = ({ isEmpty }) => {
+const ThreadRoot: FC<{ isEmpty: boolean; maxWidth: string }> = ({ isEmpty, maxWidth }) => {
     const { Welcome = ThreadWelcome } = useContext(ThreadComponentsContext);
 
     return (
         <ThreadPrimitive.Root
-            className="aui-root aui-thread-root @container flex h-full flex-col bg-background"
+            className="aui-root aui-thread-root @container flex h-full min-h-0 flex-1 flex-col bg-background"
             style={{
-                ["--thread-max-width" as string]: "44rem",
+                ["--thread-max-width" as string]: maxWidth,
                 ["--composer-bg" as string]: "color-mix(in oklab, var(--color-muted) 30%, var(--color-background))",
                 ["--composer-radius" as string]: "1.5rem",
                 ["--composer-padding" as string]: "8px",
@@ -95,7 +98,7 @@ const ThreadRoot: FC<{ isEmpty: boolean }> = ({ isEmpty }) => {
             <ThreadPrimitive.Viewport
                 turnAnchor="top"
                 data-slot="aui_thread-viewport"
-                className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll scroll-smooth"
+                className="relative flex min-h-0 flex-1 flex-col overflow-x-auto overflow-y-scroll scroll-smooth"
             >
                 <div className={cn("mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4", isEmpty && "justify-center")}>
                     <AuiIf condition={isNewChatView}>
@@ -159,25 +162,39 @@ const ThreadWelcome: FC = () => {
 };
 
 const ThreadSuggestions: FC = () => {
+    const { starters, startersLoading, sendQuestion } = useAssistantFeatures();
+    const { options, selectedGemeente, isLoading } = useFilters();
+    const gemeenteNaam = options.gemeenten.find((gemeente) => gemeente.id === String(selectedGemeente))?.label;
+
+    if (startersLoading) {
+        return <p className="px-4 text-center text-xs text-muted-foreground">Voorbeelden laden…</p>;
+    }
+    if (!starters.length) {
+        return (
+            <p className="px-4 text-center text-xs text-muted-foreground">
+                Jouw geselecteerde gemeente: {gemeenteNaam ?? (isLoading ? "Laden…" : "Geen gemeente geselecteerd")}
+            </p>
+        );
+    }
+
     return (
         <div className="aui-thread-welcome-suggestions flex w-full flex-wrap items-center justify-center gap-2 px-4">
-            <ThreadPrimitive.Suggestions>{() => <ThreadSuggestionItem />}</ThreadPrimitive.Suggestions>
+            {starters.map((starter) => <ThreadSuggestionItem key={starter.question} question={starter.question} onSend={() => sendQuestion(starter.question)} />)}
         </div>
     );
 };
 
-const ThreadSuggestionItem: FC = () => {
+const ThreadSuggestionItem: FC<{ question: string; onSend: () => void }> = ({ question, onSend }) => {
     return (
         <div className="aui-thread-welcome-suggestion-display animate-in duration-200 fill-mode-both fade-in slide-in-from-bottom-2">
-            <SuggestionPrimitive.Trigger send asChild>
-                <Button
-                    variant="ghost"
-                    className="aui-thread-welcome-suggestion h-auto gap-1.5 rounded-full border border-border/60 px-3.5 py-1.5 text-sm font-normal whitespace-nowrap text-foreground transition-colors hover:bg-muted"
-                >
-                    <SuggestionPrimitive.Title className="aui-thread-welcome-suggestion-text-1" />
-                    <SuggestionPrimitive.Description className="aui-thread-welcome-suggestion-text-2 empty:hidden" />
-                </Button>
-            </SuggestionPrimitive.Trigger>
+            <Button
+                type="button"
+                variant="ghost"
+                onClick={onSend}
+                className="aui-thread-welcome-suggestion h-auto max-w-full gap-1.5 rounded-full border border-border/60 px-3.5 py-1.5 text-sm font-normal whitespace-normal text-foreground transition-colors hover:bg-muted"
+            >
+                {question}
+            </Button>
         </div>
     );
 };
@@ -344,7 +361,7 @@ const AssistantMessage: FC = () => {
                                 return part.dataRendererUI;
                             case "indicator":
                                 return (
-                                    <span data-slot="aui_assistant-message-indicator" className="animate-pulse font-sans" aria-label="Assistent is bezig">
+                                    <span data-slot="aui_assistant-message-indicator" className="animate-pulse font-sans" aria-label="Kompas AI is bezig">
                                         {"●"}
                                     </span>
                                 );
@@ -353,6 +370,7 @@ const AssistantMessage: FC = () => {
                         }
                     }}
                 </MessagePrimitive.GroupedParts>
+                <AnswerEngineDetails />
                 <MessageError />
             </div>
 

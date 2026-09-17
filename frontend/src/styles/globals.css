@@ -65,11 +65,15 @@ input[type="search"]::-webkit-search-cancel-button {
     -webkit-appearance: none;
 }
 
-/* Hide the default outline on chart elements. */
-.recharts-surface,
-.recharts-surface g,
-.recharts-surface path {
-    outline: none;
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+    }
 }
 
 @theme inline {
@@ -130,7 +134,9 @@ input[type="search"]::-webkit-search-cancel-button {
     --muted-foreground: oklch(0.556 0 0);
     --accent: oklch(0.97 0 0);
     --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
+    /* red-700, not shadcn's default red-600: text-destructive on bg-destructive/10 is only
+       4.1:1 with red-600, below the WCAG AA 4.5:1 floor. */
+    --destructive: oklch(0.505 0.213 27.518);
     --border: oklch(0.922 0 0);
     --input: oklch(0.922 0 0);
     --ring: oklch(0.708 0 0);

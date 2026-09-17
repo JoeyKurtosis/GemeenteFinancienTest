@@ -293,7 +293,8 @@
     --color-text-tertiary: var(--color-neutral-600);
     --color-text-error-primary: var(--color-red-600);
     --color-text-warning-primary: var(--color-yellow-600);
-    --color-text-success-primary: var(--color-green-600);
+    /* green-700, not -600: green-600 on white is only 3.24:1, below the WCAG AA 4.5:1 floor. */
+    --color-text-success-primary: var(--color-green-700);
     --color-text-white: var(--color-white);
     --color-text-secondary: var(--color-neutral-700);
     --color-text-secondary_hover: var(--color-neutral-800);
@@ -353,7 +354,8 @@
     --color-bg-warning-secondary: var(--color-yellow-100);
     --color-bg-success-primary: var(--color-green-50);
     --color-bg-success-secondary: var(--color-green-100);
-    --color-bg-brand-solid: var(--color-brand-600);
+    /* brand-700, not -600: white text on -600 is only 3.33:1, below the WCAG AA 4.5:1 floor. */
+    --color-bg-brand-solid: var(--color-brand-700);
     --color-bg-secondary-solid: var(--color-neutral-600);
     --color-bg-error-solid: var(--color-red-600);
     --color-bg-warning-solid: var(--color-yellow-600);
@@ -361,7 +363,7 @@
     --color-bg-secondary_hover: var(--color-neutral-100);
     --color-bg-primary_hover: var(--color-neutral-50);
     --color-bg-active: var(--color-neutral-50);
-    --color-bg-brand-solid_hover: var(--color-brand-700);
+    --color-bg-brand-solid_hover: var(--color-brand-800);
     --color-bg-error-primary: var(--color-red-50);
     --color-bg-brand-secondary: var(--color-brand-100);
     --color-bg-secondary: var(--color-neutral-50);
@@ -384,7 +386,7 @@
     --color-featured-icon-light-fg-success: var(--color-green-600);
     --color-featured-icon-light-fg-warning: var(--color-yellow-600);
     --color-focus-ring-error: var(--color-red-500);
-    --color-focus-ring: var(--color-brand-500);
+    --color-focus-ring: var(--color-brand-700);
     --color-footer-button-fg: var(--color-brand-200);
     --color-footer-button-fg_hover: var(--color-white);
     --color-icon-fg-brand: var(--color-brand-600);
@@ -713,7 +715,8 @@
         --color-bg-warning-secondary: var(--color-yellow-600);
         --color-bg-success-primary: var(--color-green-950);
         --color-bg-success-secondary: var(--color-green-600);
-        --color-bg-brand-solid: var(--color-brand-600);
+        /* Same WCAG AA floor as light mode: white text needs brand-700 or darker. */
+        --color-bg-brand-solid: var(--color-brand-700);
         --color-bg-secondary-solid: var(--color-neutral-600);
         --color-bg-error-solid: var(--color-red-600);
         --color-bg-warning-solid: var(--color-yellow-600);
@@ -721,7 +724,7 @@
         --color-bg-secondary_hover: var(--color-neutral-800);
         --color-bg-primary_hover: var(--color-neutral-900);
         --color-bg-active: var(--color-neutral-800);
-        --color-bg-brand-solid_hover: var(--color-brand-500);
+        --color-bg-brand-solid_hover: var(--color-brand-800);
         --color-bg-error-primary: var(--color-red-950);
         --color-bg-brand-secondary: var(--color-brand-600);
         --color-bg-secondary: var(--color-neutral-900);

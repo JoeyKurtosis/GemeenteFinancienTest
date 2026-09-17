@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { type FC, useRef, useState } from "react";
 import { MessageChatSquare } from "@untitledui/icons";
 import { Button as AriaButton, Dialog as AriaDialog, DialogTrigger as AriaDialogTrigger, Popover as AriaPopover } from "react-aria-components";
 import { Button } from "@/components/base/buttons/button";
@@ -10,9 +10,19 @@ interface ChartCommentButtonProps {
     chartId: string;
     comment?: ChartComment;
     onSaved: () => void;
+    /**
+     * The icon on the trigger. A speech bubble in a card header, where the button stands for the
+     * note itself; a pencil where it sits beside a note already printed out — there it edits that
+     * note rather than announcing one.
+     */
+    icon?: FC<{ className?: string; "aria-hidden"?: "true" }>;
+    /** Accessible name for the trigger. */
+    label?: string;
+    /** Extra classes for the trigger. */
+    className?: string;
 }
 
-export function ChartCommentButton({ chartId, comment, onSaved }: ChartCommentButtonProps) {
+export function ChartCommentButton({ chartId, comment, onSaved, icon: Icon = MessageChatSquare, label = "Notitie", className }: ChartCommentButtonProps) {
     const [text, setText] = useState(comment?.text ?? "");
     const [isSaving, setIsSaving] = useState(false);
     const triggerRef = useRef<HTMLButtonElement>(null);
@@ -58,12 +68,13 @@ export function ChartCommentButton({ chartId, comment, onSaved }: ChartCommentBu
             <AriaButton
                 ref={triggerRef}
                 className={cx(
-                    "rounded-md p-1.5 transition duration-100 ease-linear hover:bg-secondary_hover",
+                    "cursor-pointer rounded-md p-1.5 transition duration-100 ease-linear hover:bg-secondary_hover",
                     hasComment ? "text-brand-secondary hover:text-brand-secondary" : "text-fg-quaternary hover:text-fg-quaternary_hover",
+                    className,
                 )}
-                aria-label="Notitie"
+                aria-label={label}
             >
-                <MessageChatSquare className="size-5" aria-hidden="true" />
+                <Icon className="size-5" aria-hidden="true" />
             </AriaButton>
             <AriaPopover triggerRef={triggerRef} placement="bottom end" className="w-80 rounded-xl bg-primary shadow-lg ring-1 ring-secondary ring-inset">
                 <AriaDialog className="flex flex-col gap-3 p-4 outline-hidden">

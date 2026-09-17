@@ -81,11 +81,11 @@ export function PasswordResetRouteView() {
     const isDisabled = isLoadingToken || !!tokenError;
 
     return (
-        <section className="min-h-screen bg-primary px-4 py-12 sm:bg-secondary md:px-8 md:pt-24">
+        <main id="main-content" tabIndex={-1} className="min-h-screen bg-primary px-4 py-12 outline-none sm:bg-secondary md:px-8 md:pt-24">
             <div className="flex w-full flex-col gap-6 bg-primary sm:mx-auto sm:max-w-110 sm:rounded-2xl sm:px-10 sm:py-8 sm:shadow-sm">
                 <div className="flex flex-col items-center gap-6 text-center">
-                    <Link to="/">
-                        <Logo className="h-[50px] text-[#133556] dark:text-white" />
+                    <Link to="/" aria-label="Gemeentefinanciën, naar de startpagina">
+                        <Logo aria-hidden="true" className="h-[50px] text-[#133556] dark:text-white" />
                     </Link>
                     <div className="flex flex-col gap-2 md:gap-3">
                         <h1 className="text-xl font-semibold text-primary md:text-display-xs">Wachtwoord resetten</h1>
@@ -93,7 +93,7 @@ export function PasswordResetRouteView() {
                     </div>
                 </div>
 
-                {tokenError && <p className="text-center text-sm text-error-primary">{tokenError}</p>}
+                {tokenError && <p role="alert" className="text-center text-sm text-error-primary">{tokenError}</p>}
 
                 {!isDisabled && (
                     <Form onSubmit={handleSubmit} className="flex flex-col gap-5">
@@ -107,6 +107,8 @@ export function PasswordResetRouteView() {
                             placeholder="••••••••••••"
                             value={password}
                             onChange={(v) => setPassword(v)}
+                            autoComplete="new-password"
+                            aria-describedby={error ? "password-reset-error" : undefined}
                         />
 
                         <Input
@@ -117,6 +119,8 @@ export function PasswordResetRouteView() {
                             placeholder="••••••••••••"
                             value={confirmPassword}
                             onChange={(v) => setConfirmPassword(v)}
+                            autoComplete="new-password"
+                            aria-describedby={error ? "password-reset-error" : undefined}
                         />
 
                         <div className="grid grid-cols-2 gap-2">
@@ -124,7 +128,7 @@ export function PasswordResetRouteView() {
                             <RequirementItem ok={checks.hasSpecialChar} label="Minimaal 1 speciaal teken" />
                         </div>
 
-                        {error && <p className="text-sm text-error-primary">{error}</p>}
+                        {error && <p id="password-reset-error" role="alert" className="text-sm text-error-primary">{error}</p>}
 
                         <Button type="submit" size="lg" isLoading={isSubmitting} showTextWhileLoading>
                             Wachtwoord resetten
@@ -138,6 +142,6 @@ export function PasswordResetRouteView() {
                     </Button>
                 </div>
             </div>
-        </section>
+        </main>
     );
 }

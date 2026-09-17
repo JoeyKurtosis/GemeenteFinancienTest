@@ -30,16 +30,16 @@ export function ForgotPasswordRouteView() {
     }
 
     return (
-        <section className="min-h-screen overflow-hidden bg-primary px-4 py-12 md:px-8 md:pt-24">
+        <main id="main-content" tabIndex={-1} className="min-h-screen overflow-hidden bg-primary px-4 py-12 outline-none md:px-8 md:pt-24">
             <div className="mx-auto flex w-full max-w-90 flex-col gap-8">
                 <div className="flex flex-col items-center gap-6 text-center">
-                    <Link to="/">
-                        <Logo className="h-[50px] text-[#133556] dark:text-white" />
+                    <Link to="/" aria-label="Gemeentefinanciën, naar de startpagina">
+                        <Logo aria-hidden="true" className="h-[50px] text-[#133556] dark:text-white" />
                     </Link>
 
                     <div className="flex flex-col gap-2 md:gap-3">
                         <h1 className="text-xl font-semibold text-primary md:text-display-xs">Wachtwoord vergeten?</h1>
-                        <p className="self-stretch text-md text-tertiary">
+                        <p role={isSuccess ? "status" : undefined} className="self-stretch text-md text-tertiary">
                             {isSuccess
                                 ? "We hebben je een e-mail gestuurd met instructies om je wachtwoord te resetten."
                                 : "Geen zorgen, we sturen je instructies om het te resetten."}
@@ -49,9 +49,9 @@ export function ForgotPasswordRouteView() {
 
                 {!isSuccess && (
                     <Form onSubmit={handleSubmit} className="flex flex-col gap-6">
-                        <Input isRequired hideRequiredIndicator label="E-mailadres" type="email" name="email" placeholder="naam@voorbeeld.nl" size="lg" />
+                        <Input isRequired hideRequiredIndicator label="E-mailadres" type="email" name="email" placeholder="naam@voorbeeld.nl" size="lg" autoComplete="email" aria-describedby={error ? "reset-request-error" : undefined} />
 
-                        {error && <p className="text-sm text-error-primary">{error}</p>}
+                        {error && <p id="reset-request-error" role="alert" className="text-sm text-error-primary">{error}</p>}
 
                         <Button type="submit" size="lg" isLoading={isSubmitting} showTextWhileLoading>
                             Wachtwoord resetten
@@ -65,6 +65,6 @@ export function ForgotPasswordRouteView() {
                     </Button>
                 </div>
             </div>
-        </section>
+        </main>
     );
 }

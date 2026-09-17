@@ -37,8 +37,8 @@ export interface FilterOptions {
      * The verslagsoorten of *every* year, keyed by year as a string.
      *
      * The rest of this payload describes the applied year; this one alone covers them all,
-     * so the sidebar can answer "does the year the user just picked have a Jaarrekening?"
-     * without waiting for Toepassen and a refetch. Cheap enough to always send.
+     * so the sidebar can atomically pair a newly selected year with an available verslagsoort,
+     * before the year-specific refetch completes. Cheap enough to always send.
      */
     verslagsoortenPerJaar: Record<string, FilterOption[]>;
 }

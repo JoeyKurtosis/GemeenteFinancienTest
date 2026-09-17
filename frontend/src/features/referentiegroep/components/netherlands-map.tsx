@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { InfoCircle, RefreshCw01, ZoomIn, ZoomOut } from "@untitledui/icons";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, InfoCircle, RefreshCw01, ZoomIn, ZoomOut } from "@untitledui/icons";
 import { Button } from "@/components/base/buttons/button";
 import { useFilters } from "@/features/filters";
 import { resolveGemeenteCode } from "../data/gemeente-mergers";
@@ -33,12 +33,22 @@ import type { ReferentiegroepSamenstelling } from "../hooks/use-referentiegroep-
 /** stroke-width in user units. `non-scaling-stroke` keeps it constant however far you zoom. */
 const STREEK = 0.5;
 
+/** A two-tone outline stays distinct on every province colour and in both themes. */
+function JouwGemeenteContour({ d }: { d: string }) {
+    return (
+        <g fill="none" pointerEvents="none" strokeLinejoin="round">
+            <path d={d} stroke="#fff" strokeWidth={5} vectorEffect="non-scaling-stroke" />
+            <path d={d} stroke="#111827" strokeWidth={2.5} vectorEffect="non-scaling-stroke" />
+        </g>
+    );
+}
+
 interface NetherlandsMapProps {
     samenstelling: ReferentiegroepSamenstelling;
 }
 
 export default function NetherlandsMap({ samenstelling }: NetherlandsMapProps) {
-    const { options, isLoading } = useFilters();
+    const { options, applied, isLoading } = useFilters();
     const { zichtbaar, provincies, selectie, onSelectieChange } = samenstelling;
 
     const wrapperRef = useRef<HTMLDivElement>(null);
@@ -46,7 +56,8 @@ export default function NetherlandsMap({ samenstelling }: NetherlandsMapProps) {
     const tooltipRef = useRef<HTMLDivElement>(null);
     const [zweeftOver, setZweeftOver] = useState<string | null>(null);
 
-    const { transform, kanInzoomen, kanUitzoomen, kanHerstellen, zoomIn, zoomUit, reset, zoomNaarVak, wasSleep, pointerHandlers } = useMapView(wrapperRef);
+    const { transform, kanInzoomen, kanUitzoomen, kanHerstellen, zoomIn, zoomUit, panMet, reset, zoomNaarVak, wasSleep, pointerHandlers } =
+        useMapView(wrapperRef);
 
     const gemeentePerCode = useMemo(() => new Map(options.gemeenten.map((gemeente) => [gemeente.id, gemeente])), [options.gemeenten]);
 
@@ -83,6 +94,9 @@ export default function NetherlandsMap({ samenstelling }: NetherlandsMapProps) {
         };
     }, [gemeentePerCode]);
 
+    const eigenGemeente = applied.gemeente ? gemeentePerCode.get(applied.gemeente) : undefined;
+    const eigenGemeenteVorm = vormen.gemeenten.find(({ code }) => code === eigenGemeente?.id);
+
     /** Gemeenten this year has that the 2021 outlines cannot draw. Zero for 2021 and later. */
     const ontbrekend = useMemo(() => {
         const getekend = new Set(vormen.gemeenten.map((vorm) => vorm.code));
@@ -110,9 +124,7 @@ export default function NetherlandsMap({ samenstelling }: NetherlandsMapProps) {
             return;
         }
 
-        const codes = options.gemeenten
-            .filter((gemeente) => gemeente.provincie && gekozenProvincies.has(gemeente.provincie))
-            .map((gemeente) => gemeente.id);
+        const codes = options.gemeenten.filter((gemeente) => gemeente.provincie && gekozenProvincies.has(gemeente.provincie)).map((gemeente) => gemeente.id);
 
         let minX = Infinity;
         let minY = Infinity;
@@ -238,6 +250,9 @@ export default function NetherlandsMap({ samenstelling }: NetherlandsMapProps) {
                                 <path key={`leeg-${index}`} d={d} className={ZONDER_GEMEENTE} strokeWidth={STREEK} />
                             ))}
                             {paden}
+                            {/* Draw last so neighbouring paths cannot cover the contour.
+                                Pointer events pass through to the existing selection paths. */}
+                            {eigenGemeenteVorm && <JouwGemeenteContour d={eigenGemeenteVorm.d} />}
                         </g>
                     </svg>
 
@@ -245,12 +260,13 @@ export default function NetherlandsMap({ samenstelling }: NetherlandsMapProps) {
                         <div ref={tooltipRef} className="pointer-events-none absolute top-0 left-0 z-10">
                             <div className="translate-x-2 -translate-y-full rounded-lg bg-primary-solid px-2.5 py-1.5 shadow-lg">
                                 <p className="text-xs font-semibold whitespace-nowrap text-white">{zwevendeGemeente.label}</p>
+                                {zwevendeGemeente.id === eigenGemeente?.id && <p className="text-xs text-white">Jouw gemeente</p>}
                                 {zwevendeGemeente.inwoners != null && (
-                                    <p className="text-xs whitespace-nowrap text-white/70">{zwevendeGemeente.inwoners.toLocaleString("nl-NL")} inwoners</p>
+                                    <p className="text-xs whitespace-nowrap text-white/90">{zwevendeGemeente.inwoners.toLocaleString("nl-NL")} inwoners</p>
                                 )}
                                 {/* Shift-click is worth nothing if nobody knows it is there, and the
                                     tooltip is already open at the moment it becomes useful. */}
-                                <p className="text-xs whitespace-nowrap text-white/50">
+                                <p className="text-xs whitespace-nowrap text-white/90">
                                     {zweeftOverGekozen ? "Shift+klik om te verwijderen" : "Klik om te kiezen · shift+klik om toe te voegen"}
                                 </p>
                             </div>
@@ -258,7 +274,7 @@ export default function NetherlandsMap({ samenstelling }: NetherlandsMapProps) {
                     )}
                 </div>
 
-                <div className="absolute top-3 right-3 flex flex-col gap-1">
+                <div className="absolute top-3 right-3 flex flex-col items-end gap-1">
                     <Button color="secondary" size="sm" iconLeading={ZoomIn} aria-label="Inzoomen" isDisabled={!kanInzoomen || isLoading} onClick={zoomIn} />
                     <Button
                         color="secondary"
@@ -277,15 +293,55 @@ export default function NetherlandsMap({ samenstelling }: NetherlandsMapProps) {
                         onClick={reset}
                     />
                 </div>
+                <div className="absolute top-3 left-3">
+                    <div className="mt-2 grid grid-cols-3 gap-1" role="group" aria-label="Kaart verschuiven">
+                        <Button
+                            type="button"
+                            color="secondary"
+                            size="sm"
+                            iconLeading={ArrowUp}
+                            aria-label="Kaart omhoog"
+                            className="col-start-2 row-start-1"
+                            onClick={() => panMet(0, -0.2)}
+                        />
+                        <Button
+                            type="button"
+                            color="secondary"
+                            size="sm"
+                            iconLeading={ArrowLeft}
+                            aria-label="Kaart naar links"
+                            className="col-start-1 row-start-2"
+                            onClick={() => panMet(-0.2, 0)}
+                        />
+                        <Button
+                            type="button"
+                            color="secondary"
+                            size="sm"
+                            iconLeading={ArrowRight}
+                            aria-label="Kaart naar rechts"
+                            className="col-start-3 row-start-2"
+                            onClick={() => panMet(0.2, 0)}
+                        />
+                        <Button
+                            type="button"
+                            color="secondary"
+                            size="sm"
+                            iconLeading={ArrowDown}
+                            aria-label="Kaart omlaag"
+                            className="col-start-2 row-start-3"
+                            onClick={() => panMet(0, 0.2)}
+                        />
+                    </div>
+                </div>
             </div>
 
             {/* The map is aria-hidden, so this is what a screen reader hears a click do. */}
             <p aria-live="polite" className="sr-only">
                 {geselecteerd.size} gemeenten geselecteerd
             </p>
-            <p className="sr-only">
-                De kaart toont de Referentiegroep-selectie hierboven. Klikken kiest één gemeente, shift+klik voegt er een toe. Gebruik de Referentiegroep-lijst
-                om gemeenten met het toetsenbord te selecteren.
+            <p className="text-sm text-tertiary">
+                Kies gemeenten met de Referentiegroep-lijst boven de kaart. Op de kaart kun je ook klikken om één gemeente te kiezen of shift+klik om er meer te
+                kiezen. Verschuif de kaart met de pijlknoppen; gebruik Ctrl of ⌘ met het muiswiel om te zoomen.
             </p>
 
             {ontbrekend.length > 0 && (

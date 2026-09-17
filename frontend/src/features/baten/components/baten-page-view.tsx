@@ -16,8 +16,9 @@ const batenTabs: SectionTab[] = [
 
 /**
  * Shared layout for every Baten page. Renders the section tab navigation, then composes the
- * Untitled UI chart cards in a 2-column grid: Uitleg (top-left), Referentiegroep ranking
- * (top-right), full-width donut comparison, then Trend.
+ * Untitled UI chart cards in a 2-column grid: the full-width donut comparison, then Trend and
+ * the Referentiegroep ranking side by side. The page's uitleg is not in the grid — it sits
+ * under the title in the PageHeader, fed by each route's `subContent` (baten-uitleg.tsx).
  *
  * The four pages are one layout over a different bron of income — `bron` picks both the copy
  * (BATEN_PAGINAS) and what the backend measures (iv3/queries.py).
@@ -38,14 +39,42 @@ export function BatenPageView({ bron }: { bron: BatenBron }) {
     const verdeling = data?.verdeling ?? null;
     const referentiegroep = data?.referentiegroep ?? [];
 
-    const chartIds = [`baten:Referentiegroep:${bron}`, `baten:Trend:${bron}`];
+    // The donut's heading is the page's own copy rather than a fixed one, so its id is built
+    // from it — the bron on the end is what keeps the four pages' notes apart.
+    const donutChartId = `baten:${pagina.donutTitle}:${bron}`;
+    const chartIds = [`baten:Referentiegroep:${bron}`, `baten:Trend:${bron}`, donutChartId];
     const { commentsMap, invalidate } = useChartComments(chartIds);
 
     return (
         <div className="flex flex-col gap-6">
-            <SectionTabs items={batenTabs} />
+            <SectionTabs items={batenTabs} label="Baten" />
             <section className="grid gap-6 lg:grid-cols-2">
-                <InfoCard title="Uitleg" paragraphs={pagina.uitlegParagraphs} />
+                {(verdeling || isLoading) && (
+                    <DonutComparisonCard
+                        title={pagina.donutTitle}
+                        isLoading={isLoading || !verdeling}
+                        categories={verdeling ? verdelingCategories(verdeling) : []}
+                        left={verdeling ? donutSide(verdeling, verdeling.links) : null}
+                        right={verdeling ? donutSide(verdeling, verdeling.rechts) : null}
+                        expandable
+                        className="col-span-2"
+                        chartId={donutChartId}
+                        comment={commentsMap.get(donutChartId)}
+                        onCommentChange={invalidate}
+                    />
+                )}
+
+                <ChartCard
+                    title="Trend"
+                    data={data?.trend ?? []}
+                    series={trendSeries(data?.cohorten ?? [])}
+                    chartType="line"
+                    isLoading={isLoading}
+                    expandable
+                    chartId={`baten:Trend:${bron}`}
+                    comment={commentsMap.get(`baten:Trend:${bron}`)}
+                    onCommentChange={invalidate}
+                />
 
                 {/* Without a referentiegroep there are no gemeenten to draw, so the card says
                     so rather than showing an empty chart. */}
@@ -69,30 +98,6 @@ export function BatenPageView({ bron }: { bron: BatenBron }) {
                         paragraphs={["Kies gemeenten in de referentiegroep om hun baten naast elkaar te zien."]}
                     />
                 )}
-
-                {verdeling && (
-                    <DonutComparisonCard
-                        title={pagina.donutTitle}
-                        categories={verdelingCategories(verdeling)}
-                        left={donutSide(verdeling, verdeling.links)}
-                        right={donutSide(verdeling, verdeling.rechts)}
-                        expandable
-                        className="col-span-2"
-                    />
-                )}
-
-                <ChartCard
-                    title="Trend"
-                    data={data?.trend ?? []}
-                    series={trendSeries(data?.cohorten ?? [])}
-                    chartType="line"
-                    isLoading={isLoading}
-                    expandable
-                    className="col-span-2"
-                    chartId={`baten:Trend:${bron}`}
-                    comment={commentsMap.get(`baten:Trend:${bron}`)}
-                    onCommentChange={invalidate}
-                />
             </section>
         </div>
     );

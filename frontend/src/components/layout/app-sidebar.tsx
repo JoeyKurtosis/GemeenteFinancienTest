@@ -1,5 +1,5 @@
 import { useRouter } from "@tanstack/react-router";
-import { Bank, BookOpen01, CoinsStacked02, FileCheck02, Home02, MessageCircle01, Settings01, User02 } from "@untitledui/icons";
+import { BookOpen01, Compass, Compass01, Compass02, Compass03, FileCheck02, Home02, MessageCircle01, Settings01, User02 } from "@untitledui/icons";
 import type { NavItemType } from "@/components/application/app-navigation/config";
 import { SidebarNavigationSimple } from "@/components/application/app-navigation/sidebar-navigation/sidebar-simple";
 import { useAuth } from "@/features/auth";
@@ -9,6 +9,11 @@ const navItems: NavItemType[] = [
         label: "Home",
         href: "/",
         icon: Home02,
+    },
+    {
+        label: "Kompas AI",
+        href: "/assistent",
+        icon: Compass03,
     },
     {
         label: "Over ons",
@@ -21,19 +26,9 @@ const navItems: NavItemType[] = [
         icon: User02,
     },
     {
-        label: "Managementoverzicht",
-        href: "/managementoverzicht",
-        icon: CoinsStacked02,
-    },
-    {
         label: "Verantwoording",
         href: "/verantwoording",
         icon: FileCheck02,
-    },
-    {
-        label: "Trends",
-        href: "/trends",
-        icon: Bank,
     },
 ];
 
@@ -54,7 +49,7 @@ export function AppSidebar() {
     const pathname = router.state.location.pathname;
     const { isAuthenticated, isAdmin } = useAuth();
 
-    const items = [...navItems, ...(isAdmin ? [instellingenNavItem] : []), ...(isAuthenticated ? [supportNavItem] : [])];
+    const items = [...navItems, ...(isAuthenticated ? [supportNavItem] : [])];
 
-    return <SidebarNavigationSimple activeUrl={pathname} items={items} showAccountCard />;
+    return <SidebarNavigationSimple activeUrl={pathname} items={items} showAccountCard={false} />;
 }

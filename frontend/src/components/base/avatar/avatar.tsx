@@ -102,7 +102,7 @@ export const Avatar = ({
         }
 
         if (initials) {
-            return <span className={cx("text-quaternary", styles[size].initials)}>{initials}</span>;
+            return <span className={cx("text-tertiary", styles[size].initials)}>{initials}</span>;
         }
 
         if (PlaceholderIcon) {

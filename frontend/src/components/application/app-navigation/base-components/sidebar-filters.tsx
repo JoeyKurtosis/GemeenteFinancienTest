@@ -1,8 +1,8 @@
 "use client";
 
 import { HelpCircle, LinkExternal01 } from "@untitledui/icons";
-import { Link as AriaLink, type Key, type Selection } from "react-aria-components";
-import { Button } from "@/components/base/buttons/button";
+import { Link, useLocation } from "@tanstack/react-router";
+import { type Key, type Selection } from "react-aria-components";
 import { Label } from "@/components/base/input/label";
 import { MultiSelect } from "@/components/base/select/multi-select";
 import { Select } from "@/components/base/select/select";
@@ -50,30 +50,26 @@ const withAllesRow = (options: FilterOption[], selected: Selection, onChange: (k
 interface SidebarFiltersProps {
     /** Additional CSS classes to apply to the wrapper. */
     className?: string;
-    /** Called when the user applies the filters (e.g. to close the popover). */
-    onApply?: () => void;
 }
 
 /**
- * The dashboard filters, of which each route shows the ones it actually draws with.
+ * The dashboard filters. Verslagsoort stays visible on every route to keep the selection clear.
  *
- * Rendered from every control that opens the filter menu — the sidebar's button, its collapsed
- * icon, and the summary row above the charts. It reads FiltersProvider itself rather than taking
- * the selections as props: it is only ever mounted inside that provider, and passing twelve
- * values down meant each new trigger had to assemble the same object again.
+ * Rendered twice by the sidebar: inline when it is expanded, and inside the collapsed rail's
+ * funnel popover. It reads FiltersProvider itself rather than taking the selections as props:
+ * it is only ever mounted inside that provider, and passing the values down meant each new
+ * trigger had to assemble the same object again.
  *
  * Trends is the one route that reads differently: it has no single gemeente
  * to compare against a group, so the ComboBox is left off and the multi-select is the
  * report's "Gemeente" slicer — the set of municipalities every average is taken over.
  */
-export const SidebarFilters = ({ className, onApply }: SidebarFiltersProps) => {
+export const SidebarFilters = ({ className }: SidebarFiltersProps) => {
+    const { pathname } = useLocation();
     const {
         options,
-        draftVerslagsoorten,
+        availableVerslagsoorten,
         isLoading,
-        reset,
-        apply,
-        hasPendingChanges,
         selectedGemeente,
         onGemeenteChange,
         selectedReferentiegroepen,
@@ -92,17 +88,7 @@ export const SidebarFilters = ({ className, onApply }: SidebarFiltersProps) => {
     const isTrends = !relevance.gemeente;
     const showReservemutaties = relevance.reservemutaties;
 
-    // Only where there is a choice to make. A year carries a Jaarrekening once it has been
-    // filed, so the newest year or two hold nothing but a Begroting — and a dropdown with one
-    // option is a control that cannot do anything. Counted off the options rather than tested
-    // for the "005" suffix, so this stays a statement about having something to pick.
-    //
-    // Off the *draft* year, not the applied one: picking 2024 in the select beside this has to
-    // reveal the choice immediately, not after a Toepassen and a second trip into this menu.
-    //
-    // Kept here rather than in useFilterRelevance because it is a statement about the data, not
-    // about the route — the summary row asks the same hook and wants the route's answer.
-    const showVerslagsoort = draftVerslagsoorten.length > 1 && relevance.verslagsoort;
+    const vasteVerslagsoort = availableVerslagsoorten.length === 1 ? availableVerslagsoorten[0] : undefined;
 
     const jaren = options.jaren.map((jaar) => ({ id: String(jaar), label: String(jaar) }));
 
@@ -134,13 +120,14 @@ export const SidebarFilters = ({ className, onApply }: SidebarFiltersProps) => {
                 elsewhere, the population the averages are taken over here. */}
             <div className="flex flex-col gap-1.5">
                 <div className="flex items-center justify-between">
-                    <AriaLink
-                        href="/referentiegroep"
+                    <Link
+                        to="/referentiegroep"
+                        search={(previous) => ({ ...previous, terug: pathname })}
                         className="flex items-center gap-1.5 text-fg-quaternary transition duration-100 ease-linear hover:text-fg-quaternary_hover"
                     >
                         <Label className="cursor-pointer">{relevance.referentieLabel}</Label>
                         <LinkExternal01 className="size-4" aria-hidden="true" />
-                    </AriaLink>
+                    </Link>
                 </div>
                 <MultiSelect placeholder="Selecteer gemeenten" size="sm" isDisabled={isLoading} showFooter={false} {...referentiegroep}>
                     {(item) => (
@@ -162,24 +149,6 @@ export const SidebarFilters = ({ className, onApply }: SidebarFiltersProps) => {
                 </MultiSelect>
             )}
 
-            {showVerslagsoort && (
-                <Select
-                    label="Verslagsoort"
-                    placeholder="Selecteer verslagsoort"
-                    size="sm"
-                    isDisabled={isLoading}
-                    items={draftVerslagsoorten}
-                    selectedKey={selectedVerslagsoort}
-                    onSelectionChange={onVerslagsoortChange}
-                >
-                    {(item) => (
-                        <Select.Item id={item.id} label={item.label}>
-                            {item.label}
-                        </Select.Item>
-                    )}
-                </Select>
-            )}
-
             <Select
                 label="Jaar"
                 placeholder="Selecteer jaar"
@@ -195,6 +164,31 @@ export const SidebarFilters = ({ className, onApply }: SidebarFiltersProps) => {
                     </Select.Item>
                 )}
             </Select>
+            {!isLoading && availableVerslagsoorten.length > 1 ? (
+                <Select
+                    label="Verslagsoort"
+                    placeholder="Selecteer verslagsoort"
+                    size="sm"
+                    items={availableVerslagsoorten}
+                    selectedKey={selectedVerslagsoort}
+                    onSelectionChange={onVerslagsoortChange}
+                >
+                    {(item) => (
+                        <Select.Item id={item.id} label={item.label}>
+                            {item.label}
+                        </Select.Item>
+                    )}
+                </Select>
+            ) : (
+                <dl className="flex flex-col gap-1.5">
+                    <dt className="text-sm font-medium text-secondary">Verslagsoort</dt>
+                    <dd className="flex flex-col gap-1.5">
+                        <p className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary shadow-xs ring-1 ring-primary ring-inset">
+                            {isLoading ? "Laden..." : (vasteVerslagsoort?.label ?? "Geen verslagsoort beschikbaar")}
+                        </p>
+                    </dd>
+                </dl>
+            )}
             {showReservemutaties && (
                 <div className="flex items-start gap-1.5">
                     <Toggle label="Reservemutaties" isSelected={reservemutaties} onChange={onReservemutatiesChange} />
@@ -202,30 +196,12 @@ export const SidebarFilters = ({ className, onApply }: SidebarFiltersProps) => {
                         title="Door middel van deze knop kunt u de reservemutaties van een gemeente wegfilteren of juist meenemen in de bedragen. Dit is met name interessant wanneer een groot deel van de inkomsten of uitgaven een reservemutatie betreft"
                         placement="top"
                     >
-                        <TooltipTrigger className="flex h-5 cursor-pointer items-center text-fg-quaternary transition duration-100 ease-linear hover:text-fg-quaternary_hover focus:text-fg-quaternary_hover">
-                            <HelpCircle className="size-4 stroke-[2.25px]" />
+                        <TooltipTrigger aria-label="Uitleg over reservemutaties" className="flex size-6 cursor-pointer items-center justify-center rounded-sm text-fg-tertiary outline-focus-ring transition duration-100 ease-linear hover:text-secondary focus-visible:outline-2 focus-visible:outline-offset-2">
+                            <HelpCircle aria-hidden="true" className="size-4 stroke-[2.25px]" />
                         </TooltipTrigger>
                     </Tooltip>
                 </div>
             )}
-
-            <div className="mt-1 flex gap-3">
-                <Button color="secondary" size="sm" className="flex-1" onClick={reset}>
-                    Reset
-                </Button>
-                <Button
-                    color="primary"
-                    size="sm"
-                    className="flex-1"
-                    isDisabled={!hasPendingChanges}
-                    onClick={() => {
-                        apply();
-                        onApply?.();
-                    }}
-                >
-                    Toepassen
-                </Button>
-            </div>
         </div>
     );
 };

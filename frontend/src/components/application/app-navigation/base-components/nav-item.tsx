@@ -119,6 +119,7 @@ export const NavItemBase = ({
       <Link
         to={href!}
         search={true}
+        activeOptions={{ exact: true }}
         className={className}
         onClick={onClick}
         aria-current={current ? 'page' : undefined}
@@ -156,6 +157,9 @@ export const NavItemBase = ({
       // The sidebar filters live in the query string; carry them across so switching
       // pages keeps the view you had rather than resetting every select.
       search={true}
+      // `current` above is exact pathname equality. Link's own matching is a path prefix,
+      // so without this it would force aria-current="page" onto ancestor items too.
+      activeOptions={{ exact: true }}
       className={className}
       onClick={onClick}
       aria-current={current ? 'page' : undefined}

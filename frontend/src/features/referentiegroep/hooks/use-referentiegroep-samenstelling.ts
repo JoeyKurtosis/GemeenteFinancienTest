@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearch } from "@tanstack/react-router";
 import type { Selection } from "react-aria-components";
-import { type GemeenteOption, serializeSelectie, useFilters } from "@/features/filters";
+import { type FiltersSearch, type GemeenteOption, isSameSelectie, serializeSelectie, useFilters } from "@/features/filters";
 
 /**
  * The referentiegroep this page is composing, and the filters that build it.
@@ -52,12 +53,13 @@ export interface ReferentiegroepSamenstelling {
     hasPendingChanges: boolean;
     /** Hands the composed group to the dashboard. The only thing here that leaves the page. */
     toepassen: () => void;
-    /** Puts the page back as it opened. Applies nothing — Toepassen still has to be pressed. */
+    /** Restores all page filters and the selection to Alles. Applies nothing until Toepassen. */
     herstel: () => void;
 }
 
 export function useReferentiegroepSamenstelling(): ReferentiegroepSamenstelling {
     const { options, applied, applyReferentiegroepen } = useFilters();
+    const { terug } = useSearch({ strict: false }) as FiltersSearch;
 
     const [provincies, setProvincies] = useState<Selection>("all");
     const [inwonergroepen, setInwonergroepen] = useState<Selection>("all");
@@ -136,14 +138,14 @@ export function useReferentiegroepSamenstelling(): ReferentiegroepSamenstelling 
         setProvincies("all");
         setInwonergroepen("all");
         setBereik(null);
-        setSelectie(applied.referentiegroepen);
-    }, [applied.referentiegroepen]);
+        setSelectie("all");
+    }, []);
 
-    const toepassen = useCallback(() => applyReferentiegroepen(selectie), [applyReferentiegroepen, selectie]);
+    const toepassen = useCallback(() => applyReferentiegroepen(selectie, terug ?? "/"), [applyReferentiegroepen, selectie, terug]);
 
     // Compared as the URL would carry them rather than as Sets: "all" and an explicit list of
     // every gemeente are the same group, and only this spelling knows that.
-    const hasPendingChanges = serializeSelectie(selectie, options.gemeenten) !== serializeSelectie(applied.referentiegroepen, options.gemeenten);
+    const hasPendingChanges = !isSameSelectie(serializeSelectie(selectie, options.gemeenten), serializeSelectie(applied.referentiegroepen, options.gemeenten));
 
     return {
         provincies,

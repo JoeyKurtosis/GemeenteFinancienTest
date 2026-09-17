@@ -1,4 +1,4 @@
-import { ArrowRight, BarChart02, Eye, FileCheck02, Users03 } from "@untitledui/icons";
+import { ArrowRight, LineChartUp03, PieChart03, PiggyBank01, Receipt, Scales02, Users03 } from "@untitledui/icons";
 import Hero from "@/assets/icons/hero.svg?react";
 import Kurtosis from "@/assets/icons/kurtosis.svg?react";
 import { MetricsIcon02 } from "@/components/application/metrics/metrics";
@@ -23,7 +23,7 @@ export function DashboardRouteView() {
                 <div className="grid grid-cols-1 items-center gap-8 p-5 md:grid-cols-[auto_1fr] md:p-6 lg:gap-12">
                     {/* ── Hero ── */}
                     <div className="flex items-center justify-start">
-                        <Hero className="h-64 w-auto text-primary md:h-72" />
+                        <Hero aria-hidden="true" className="h-64 w-auto text-primary md:h-72" />
                     </div>
 
                     {/* ── Content ── */}
@@ -59,61 +59,51 @@ export function DashboardRouteView() {
                         </div>
                     </div>
                 </div>
-
-                {/* ── Footer ── */}
-                <div className="flex items-center justify-end gap-3 border-t border-secondary px-5 py-4">
-                    <p className="text-sm text-tertiary">Ontwikkeld door</p>
-                    <a href="https://www.kurtosis.nl/" target="_blank">
-                        <Kurtosis className="h-5 w-auto" />
-                    </a>
-                </div>
             </div>
 
-            {!isAuthenticated && <SignupCtaBanner />}
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <MetricsIcon02
                     title="In één oogopslag"
-                    description="Bekijk een samenvatting van de begrotings- en jaarrekeningcijfers van de geselecteerde gemeente."
-                    icon={<Eye />}
-                    footer={<Button href="/begroting">Per Inwoner</Button>}
+                    description="De begroting van de geselecteerde gemeente samengevat: lasten, baten en saldo op hoofdlijnen."
+                    icon={<PieChart03 />}
+                    footer={<Button href="/in-een-oogopslag">Bekijken</Button>}
                 />
                 <MetricsIcon02
                     title="Personele benchmark"
-                    description="Bekijk en vergelijk de personeelsgerelateerde kosten van jouw gemeente en referentiegroep."
+                    description="Zet de personele lasten van jouw gemeente af tegen die van de gekozen referentiegroep."
                     icon={<Users03 />}
-                    footer={<Button href="/benchmark">Per Inwoner</Button>}
-                />{" "}
+                    footer={<Button href="/benchmark">Bekijken</Button>}
+                />
                 <MetricsIcon02
                     title="Begroting versus jaarrekening"
-                    description="Bekijk een samenvatting van de begrotings- en jaarrekeningcijfers van de geselecteerde gemeente."
-                    icon={<FileCheck02 />}
-                    footer={
-                        <div className="flex gap-3">
-                            <Button href="/begroting/begroting-vs-jaarrekening-absolute-bedragen" color="secondary">
-                                Absoluut
-                            </Button>
-                            <Button href="/begroting/begroting-vs-jaarrekening-per-inwoner">Per Inwoner</Button>
-                        </div>
-                    }
+                    description="Zie per taakveld waar de gerealiseerde bedragen afwijken van wat er begroot was."
+                    icon={<Scales02 />}
+                    footer={<Button href="/begroting-vs-jaarrekening">Bekijken</Button>}
                 />
                 <MetricsIcon02
-                    title="Verdiepende cijfers"
-                    description="Bekijk een samenvatting van de begrotings- en jaarrekeningcijfers van de geselecteerde gemeente."
-                    icon={<BarChart02 />}
-                    footer={
-                        <div className="flex gap-3">
-                            <Button href="/baten" color="secondary">
-                                Baten
-                            </Button>
-                            <Button href="/lasten">Lasten</Button>
-                        </div>
-                    }
+                    title="Lasten"
+                    description="De uitgaven van de gemeente uitgesplitst naar alle taakvelden, van sociaal domein tot veiligheid."
+                    icon={<Receipt />}
+                    footer={<Button href="/lasten">Bekijken</Button>}
+                />
+                <MetricsIcon02
+                    title="Baten"
+                    description="De inkomsten van de gemeente per bron: lokale heffingen, bijdragen van het Rijk en overige inkomsten."
+                    icon={<PiggyBank01 />}
+                    footer={<Button href="/baten">Bekijken</Button>}
+                />
+                <MetricsIcon02
+                    title="Trends"
+                    description="Volg de ontwikkeling van inkomsten, uitgaven en woonlasten over meerdere jaren."
+                    icon={<LineChartUp03 />}
+                    footer={<Button href="/trends">Bekijken</Button>}
                 />
             </div>
-            <div className="flex items-center justify-end gap-3">
-                <p className="text-sm">Dit dashboard is ontwikkeld door:</p>
-                <a href="https://www.kurtosis.nl/" target="_blank">
-                    <Kurtosis className="h-6 w-auto" />
+            {/* ── Footer ── */}
+            <div className="flex items-center justify-end gap-3 border-secondary px-5 py-4">
+                <p className="text-sm text-tertiary">Ontwikkeld door</p>
+                <a href="https://www.kurtosis.nl/" target="_blank" rel="noopener noreferrer" aria-label="Kurtosis – opent in een nieuw tabblad">
+                    <Kurtosis aria-hidden="true" className="h-5 w-auto" />
                 </a>
             </div>
         </section>

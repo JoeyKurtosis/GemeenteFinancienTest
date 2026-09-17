@@ -36,11 +36,11 @@ export function LoginRouteView() {
     }
 
     return (
-        <section className="min-h-screen bg-primary px-4 py-12 sm:bg-secondary md:px-8 md:pt-24">
+        <main id="main-content" tabIndex={-1} className="min-h-screen bg-primary px-4 py-12 outline-none sm:bg-secondary md:px-8 md:pt-24">
             <div className="flex w-full flex-col gap-6 bg-primary sm:mx-auto sm:max-w-110 sm:rounded-2xl sm:px-10 sm:py-8 sm:shadow-sm">
                 <div className="flex flex-col items-center gap-6 text-center">
-                    <Link to="/">
-                        <Logo className="h-[50px] text-[#133556] dark:text-white" />
+                    <Link to="/" aria-label="Gemeentefinanciën, naar de startpagina">
+                        <Logo aria-hidden="true" className="h-[50px] text-[#133556] dark:text-white" />
                     </Link>
                     <div className="flex flex-col gap-2 md:gap-3">
                         <h1 className="text-xl font-semibold text-primary md:text-display-xs">Welkom terug</h1>
@@ -50,7 +50,7 @@ export function LoginRouteView() {
 
                 <Form onSubmit={handleSubmit} className="flex flex-col gap-6">
                     <div className="flex flex-col gap-5">
-                        <Input isRequired type="email" name="email" label="E-mailadres" placeholder="naam@voorbeeld.nl" size="lg" />
+                        <Input isRequired type="email" name="email" label="E-mailadres" placeholder="naam@voorbeeld.nl" size="lg" autoComplete="username" aria-describedby={error ? "login-error" : undefined} />
                         <Input
                             isRequired
                             type="password"
@@ -59,10 +59,12 @@ export function LoginRouteView() {
                             size="lg"
                             placeholder="••••••••••••"
                             inputClassName="placeholder:text-placeholder/50"
+                            autoComplete="current-password"
+                            aria-describedby={error ? "login-error" : undefined}
                         />
                     </div>
 
-                    {error && <p className="text-sm text-error-primary">{error}</p>}
+                    {error && <p id="login-error" role="alert" className="text-sm text-error-primary">{error}</p>}
 
                     <div className="flex items-center">
                         <Checkbox label="Onthoud mij" name="remember" />
@@ -84,6 +86,6 @@ export function LoginRouteView() {
                     </Button>
                 </div>
             </div>
-        </section>
+        </main>
     );
 }

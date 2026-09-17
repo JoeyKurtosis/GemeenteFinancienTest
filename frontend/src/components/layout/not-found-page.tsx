@@ -4,11 +4,11 @@ import { Button } from "@/components/base/buttons/button";
 
 export function NotFoundPage() {
     return (
-        <section className="grid min-h-screen flex-1 bg-primary py-16 md:py-24">
+        <main id="main-content" tabIndex={-1} className="grid min-h-screen flex-1 bg-primary py-16 outline-none md:py-24">
             <div className="mx-auto grid h-full max-w-container grid-cols-1 items-center gap-8 px-4 md:grid-cols-2 md:px-8">
                 <div className="flex h-full flex-1 flex-col items-start gap-8 md:justify-center md:gap-12 md:pr-8">
                     <div className="md:hidden">
-                        <NotFound className="h-[200px] w-auto" />
+                        <NotFound aria-hidden="true" className="h-[200px] w-auto" />
                     </div>
 
                     <div className="flex flex-col items-start gap-4 md:gap-6">
@@ -29,9 +29,9 @@ export function NotFoundPage() {
                 </div>
 
                 <div className="relative hidden h-full flex-1 items-center justify-center px-14 md:flex">
-                    <NotFound />
+                    <NotFound aria-hidden="true" />
                 </div>
             </div>
-        </section>
+        </main>
     );
 }

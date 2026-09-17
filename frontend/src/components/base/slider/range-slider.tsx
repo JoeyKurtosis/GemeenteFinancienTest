@@ -35,7 +35,7 @@ export function RangeSlider({
         >
             {label && <AriaLabel className="text-sm font-medium text-secondary">{label}</AriaLabel>}
 
-            <AriaSliderTrack className="group relative h-5 w-full">
+            <AriaSliderTrack className="group relative h-6 w-full">
                 {({ state }) => {
                     const left = state.getThumbPercent(0) * 100;
                     const right = state.getThumbPercent(1) * 100;
@@ -50,11 +50,13 @@ export function RangeSlider({
                             />
                             <AriaSliderThumb
                                 index={0}
-                                className="top-1/2 size-5 rounded-full border-2 border-brand bg-primary shadow-xs outline-none ring-brand-secondary transition duration-100 ease-linear focus-visible:ring-4"
+                                aria-label="Minimum inwonersaantal"
+                                className="top-1/2 size-6 rounded-full border-2 border-brand bg-primary shadow-xs outline-none ring-brand-secondary transition duration-100 ease-linear focus-visible:ring-4"
                             />
                             <AriaSliderThumb
                                 index={1}
-                                className="top-1/2 size-5 rounded-full border-2 border-brand bg-primary shadow-xs outline-none ring-brand-secondary transition duration-100 ease-linear focus-visible:ring-4"
+                                aria-label="Maximum inwonersaantal"
+                                className="top-1/2 size-6 rounded-full border-2 border-brand bg-primary shadow-xs outline-none ring-brand-secondary transition duration-100 ease-linear focus-visible:ring-4"
                             />
                         </>
                     );

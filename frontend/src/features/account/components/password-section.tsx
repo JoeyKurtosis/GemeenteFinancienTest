@@ -60,6 +60,7 @@ export function PasswordSection() {
                 value={currentPassword}
                 onChange={setCurrentPassword}
                 placeholder="••••••••••••"
+                autoComplete="current-password"
             />
             <Input
                 isRequired
@@ -72,6 +73,7 @@ export function PasswordSection() {
                 minLength={8}
                 hint="Je nieuwe wachtwoord moet minimaal 8 tekens bevatten."
                 placeholder="••••••••••••"
+                autoComplete="new-password"
             />
             <Input
                 isRequired
@@ -82,9 +84,11 @@ export function PasswordSection() {
                 value={confirmPassword}
                 onChange={setConfirmPassword}
                 isInvalid={Boolean(error)}
-                hint={error ?? undefined}
+                aria-describedby={error ? "account-password-error" : undefined}
                 placeholder="••••••••••••"
+                autoComplete="new-password"
             />
+            {error && <p id="account-password-error" role="alert" className="text-sm text-error-primary">{error}</p>}
 
             <hr className="border-secondary" />
 

@@ -1,7 +1,8 @@
 Beste {{ name }},
 
-Bedankt voor het aanmaken van je account bij Gemeentefinanciën.
-Je hebt nu toegang tot het dashboard.
+Bedankt voor het aanmaken van je account. Je hebt nu toegang tot het
+dashboard dat inzicht biedt in de inkomsten en uitgaven van gemeenten
+in Nederland.
 
 Log in via: {{ login_url }}
 

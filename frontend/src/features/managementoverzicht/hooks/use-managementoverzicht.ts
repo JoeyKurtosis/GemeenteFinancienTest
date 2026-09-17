@@ -4,7 +4,7 @@ import { fetchManagementoverzicht } from "../api";
 
 /**
  * The page's data, refetched whenever the *applied* filters change — the pending
- * selections in the sidebar do not reach this until the user presses "Toepassen".
+ * selections in the sidebar reach this through the URL as soon as the user chooses them.
  *
  * The applied filters live in the URL (see FiltersProvider), so a filtered view of this
  * page can be shared and survives a reload. They are also the cache key, so navigating away

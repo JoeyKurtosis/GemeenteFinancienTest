@@ -20,6 +20,7 @@ export function SupportRouteView() {
     });
     const [attachments, setAttachments] = useState<File[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
     useEffect(() => {
         if (user) {
@@ -43,12 +44,14 @@ export function SupportRouteView() {
 
     async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
         e.preventDefault();
+        setFeedback(null);
         setIsSubmitting(true);
 
         try {
             const result = await createSupportRequest({ ...formData, attachments });
             setFormData((prev) => ({ ...prev, subject: "", message: "" }));
             setAttachments([]);
+            setFeedback({ type: "success", message: `Bericht verzonden. Ticketnummer: ${result.ticket_number}` });
             toast.custom((id) => (
                 <IconNotification
                     title="Bericht verzonden"
@@ -59,6 +62,7 @@ export function SupportRouteView() {
                 />
             ));
         } catch (error) {
+            setFeedback({ type: "error", message: error instanceof Error ? error.message : "Er is iets misgegaan. Probeer het opnieuw." });
             toast.custom((id) => (
                 <IconNotification
                     title="Fout bij verzenden"
@@ -83,12 +87,14 @@ export function SupportRouteView() {
                 <p className="mb-8 text-tertiary">Hulp nodig of een vraag? Laat het ons weten via het formulier.</p>
 
                 <form className="space-y-5" onSubmit={handleSubmit}>
+                    {feedback && <p role={feedback.type === "error" ? "alert" : "status"} className={feedback.type === "error" ? "text-sm text-error-primary" : "text-sm text-success-primary"}>{feedback.message}</p>}
                     <Input
                         label="Naam"
                         placeholder="Naam"
                         isRequired
                         value={formData.name}
                         onChange={(value) => setFormData((prev) => ({ ...prev, name: value }))}
+                        autoComplete="name"
                     />
                     <Input
                         label="E-mail"
@@ -97,6 +103,7 @@ export function SupportRouteView() {
                         isRequired
                         value={formData.email}
                         onChange={(value) => setFormData((prev) => ({ ...prev, email: value }))}
+                        autoComplete="email"
                     />
                     <Input
                         label="Onderwerp"
@@ -130,7 +137,8 @@ export function SupportRouteView() {
                                         <button
                                             type="button"
                                             onClick={() => handleRemoveFile(index)}
-                                            className="ml-auto shrink-0 text-fg-quaternary transition duration-100 ease-linear hover:text-fg-error-secondary"
+                                            aria-label={`${file.name} verwijderen`}
+                                            className="ml-auto flex size-8 shrink-0 items-center justify-center rounded-md text-fg-tertiary outline-focus-ring transition duration-100 ease-linear hover:text-fg-error-secondary focus-visible:outline-2 focus-visible:outline-offset-2"
                                         >
                                             <X className="size-4" />
                                         </button>
@@ -145,7 +153,7 @@ export function SupportRouteView() {
                     </Button>
                 </form>
             </div>
-            <img src="/denhaag.jpg" alt="Support" className="max-h-125 w-1/2 shrink-0 rounded-xl object-cover object-center max-lg:hidden" />
+            <img src="/denhaag.jpg" alt="" className="max-h-125 w-1/2 shrink-0 rounded-xl object-cover object-center max-lg:hidden" />
         </section>
     );
 }

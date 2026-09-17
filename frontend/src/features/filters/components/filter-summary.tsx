@@ -9,12 +9,12 @@ import { useFilterRegels } from "../filter-regels";
 const PANEEL = "flex flex-col gap-1.5 rounded-xl bg-secondary p-3";
 
 /**
- * What the charts are currently filtered to, under the sidebar's Filters button.
+ * What the charts are currently filtered to, as a compact panel.
  *
- * That button is otherwise the only thing on screen that says these filters exist: the controls
- * are behind a popover, and once it closes nothing said what the figures actually described. The
- * report this dashboard replaces kept every slicer visible in its header for that reason — every
- * number on a page moves with these.
+ * Currently mounted nowhere: it was written for the sidebar, back when the controls sat behind a
+ * popover and nothing on screen said what the figures described once that popover closed. The
+ * expanded sidebar now shows the controls themselves, which carry the same values. Kept for the
+ * places that still only have room for the reading — a summary row above the charts, say.
  *
  * Each value is named rather than left to stand alone. "'s-Hertogenbosch" and "2 gemeenten" say
  * nothing about which filter they belong to when they sit side by side, and those two in

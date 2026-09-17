@@ -1,32 +1,51 @@
-import json
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
+from config.secrets import read_secret
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
-def _secret(secret_id: str) -> dict:
-    import boto3
-
-    client = boto3.client(
-        "secretsmanager", region_name=os.getenv("AWS_REGION", "eu-west-1")
-    )
-    return json.loads(client.get_secret_value(SecretId=secret_id)["SecretString"])
+# The keys a secret must carry. dbname is deliberately absent: RDS-managed secrets usually
+# omit it, and _postgres() falls back to <prefix>_NAME for exactly that reason.
+_REQUIRED_SECRET_KEYS = ("username", "password", "host")
 
 
-def _postgres(prefix: str, default_name: str) -> dict:
+def _postgres(prefix: str, default_name: str, *, resolve_secret: bool = True) -> dict:
     """Postgres config for `prefix`.
 
-    Credentials come from an AWS Secrets Manager secret when <prefix>_SECRET_ARN (or
-    <prefix>_SECRET_NAME) is set — boto3 resolves the AWS credentials from the
-    instance/task IAM role — and from <prefix>_USER/_PASSWORD/_HOST/... otherwise.
-    A failed secret fetch is left to raise: crashing at startup beats silently
-    falling back to a half-configured database.
+    Credentials come from <prefix>_USER/_PASSWORD/_HOST/_PORT/_NAME when _HOST and _USER
+    are both set, and from an AWS Secrets Manager secret otherwise, named by
+    <prefix>_SECRET_ARN (or <prefix>_SECRET_NAME) — boto3 resolves the AWS credentials from
+    the instance/task IAM role. A failed secret fetch is left to raise: crashing at startup
+    beats silently falling back to a half-configured database.
+
+    `resolve_secret=False` skips the fetch entirely and takes the plaintext branch. It is
+    for callers that only need a well-formed entry in DATABASES and will never connect on
+    it — see get_iv3_database().
     """
     secret_id = os.getenv(f"{prefix}_SECRET_ARN") or os.getenv(f"{prefix}_SECRET_NAME")
 
-    if secret_id:
-        secret = _secret(secret_id)
+    # Plaintext credentials beat the secret. Secrets Manager is not reachable from a laptop —
+    # there is no instance role behind boto3's default chain — so <prefix>_HOST plus
+    # <prefix>_USER in .env is how local work connects, and it has to win over a
+    # <prefix>_SECRET_NAME sitting in the same file for the deployed run. Both halves are
+    # required: a lone _HOST is not credentials, and silently connecting as an empty user
+    # would turn a typo into a confusing authentication failure.
+    plaintext = bool(os.getenv(f"{prefix}_HOST") and os.getenv(f"{prefix}_USER"))
+
+    if secret_id and resolve_secret and not plaintext:
+        secret = read_secret(secret_id)
+        missing = [key for key in _REQUIRED_SECRET_KEYS if not secret.get(key)]
+        if missing:
+            # sorted(secret) — key names only. This message reaches the logs, so the values
+            # themselves must never appear in it.
+            raise ImproperlyConfigured(
+                f"The AWS secret {secret_id!r} is missing {', '.join(missing)}. "
+                f"It carries: {', '.join(sorted(secret)) or '(nothing)'}. A standard RDS "
+                f"secret has username, password, host, port and dbname."
+            )
         # RDS-managed secrets usually omit dbname, so fall back to the env var.
         name = secret.get("dbname") or os.getenv(f"{prefix}_NAME", default_name)
         user = secret["username"]
@@ -72,8 +91,15 @@ def get_default_database() -> dict:
     }
 
 
-def get_iv3_database() -> dict:
+def get_iv3_database(*, resolve_secret: bool = False) -> dict:
     """The read-only IV3 warehouse (municipal finance data).
+
+    Resolving the secret is opt-in, and settings.py does not opt in. Every process that
+    imports settings builds DATABASES, so fetching IV3_DB_SECRET_ARN eagerly would put a
+    Secrets Manager call — and a startup crash when the role lacks GetSecretValue — in
+    front of every gunicorn worker, for a connection the web app never opens. Only
+    sync_iv3_summary passes resolve_secret=True, and it is the only thing that connects.
+    Unresolved, this is an inert entry pointing at a localhost that is never dialled.
 
     The connection is opened read-only at the Postgres level. Iv3Router already stops
     migrations from creating app tables here, but it cannot stop Django's migration
@@ -81,6 +107,6 @@ def get_iv3_database() -> dict:
     `migrate --database=iv3` would otherwise litter another team's warehouse. With this
     set, every write on this connection fails instead.
     """
-    config = _postgres("IV3_DB", "iv3")
+    config = _postgres("IV3_DB", "iv3", resolve_secret=resolve_secret)
     config["OPTIONS"]["options"] = "-c default_transaction_read_only=on"
     return config

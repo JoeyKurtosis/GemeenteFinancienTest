@@ -1,3 +1,4 @@
+export { lastenUitleg } from "./components/lasten-uitleg";
 export { LastenAlleTaakveldenRouteView } from "./components/lasten-alle-taakvelden-route-view";
 export { LastenBestuurEnOndersteuningRouteView } from "./components/lasten-bestuur-en-ondersteuning-route-view";
 export { LastenVeiligheidRouteView } from "./components/lasten-veiligheid-route-view";

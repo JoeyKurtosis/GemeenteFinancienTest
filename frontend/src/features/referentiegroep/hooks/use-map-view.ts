@@ -99,6 +99,11 @@ export function useMapView(wrapperRef: RefObject<HTMLDivElement | null>) {
         setView((huidig) => klemView(zoomRond(huidig, MAP_WIDTH / 2, MAP_HEIGHT / 2, klem(huidig.k * factor, MIN_K, MAX_K))));
     }, []);
 
+    /** Move the viewport in the arrow direction; the map content moves the opposite way. */
+    const panMet = useCallback((dx: number, dy: number) => {
+        setView((huidig) => klemView({ ...huidig, tx: huidig.tx - dx * MAP_WIDTH, ty: huidig.ty - dy * MAP_HEIGHT }));
+    }, []);
+
     const reset = useCallback(() => setView(BEGINSTAND), []);
 
     /**
@@ -132,6 +137,7 @@ export function useMapView(wrapperRef: RefObject<HTMLDivElement | null>) {
         if (!element) return;
 
         const onWheel = (event: WheelEvent) => {
+            if (!event.ctrlKey && !event.metaKey) return;
             event.preventDefault();
             const rect = element.getBoundingClientRect();
             const { schaal, offsetX, offsetY } = meetVerhouding(rect);
@@ -210,6 +216,7 @@ export function useMapView(wrapperRef: RefObject<HTMLDivElement | null>) {
         kanHerstellen: view.k > MIN_K || view.tx !== 0 || view.ty !== 0,
         zoomIn: () => zoomMet(ZOOM_STAP),
         zoomUit: () => zoomMet(1 / ZOOM_STAP),
+        panMet,
         reset,
         zoomNaarVak,
         wasSleep,

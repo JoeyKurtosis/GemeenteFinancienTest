@@ -1,5 +1,17 @@
 import type { Measure, MeasuresResponse } from "./types";
 
+/** DRF antwoordt met `{veld: ["melding", ...]}` of `{detail: "melding"}`. Pak de eerste melding. */
+async function readError(response: Response, fallback: string): Promise<Error> {
+    const data = await response.json().catch(() => ({}));
+    if (typeof data?.detail === "string") return new Error(data.detail);
+
+    for (const value of Object.values(data ?? {})) {
+        if (Array.isArray(value) && value.length) return new Error(value.join("; "));
+        if (typeof value === "string") return new Error(value);
+    }
+    return new Error(fallback);
+}
+
 export async function fetchMeasures(): Promise<MeasuresResponse> {
     const response = await fetch("/api/iv3/measures/", {
         credentials: "include",
@@ -19,12 +31,7 @@ export async function updateMeasure(
         body: JSON.stringify(payload),
     });
     if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        const errors = data.expression;
-        if (Array.isArray(errors)) {
-            throw new Error(errors.join("; "));
-        }
-        throw new Error(data.detail || "Opslaan mislukt");
+        throw await readError(response, "Opslaan mislukt");
     }
     return response.json();
 }

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { HomeLine } from "@untitledui/icons";
 import { Button } from "@/components/base/buttons/button";
+import { usePeriodeLabel } from "@/features/filters";
 import type { RouteAction } from "@/hooks/use-route-metadata";
 
 const BREADCRUMB_LABELS: Record<string, string> = {
@@ -22,15 +23,24 @@ export function PageHeader({ title, description, children, showBreadCrumbs = tru
     const pathname = router.state.location.pathname;
     const pathParts = pathname.split("/").filter(Boolean);
     const isHome = pathname === "/";
+    // Which report the figures below are drawn from, or null where the page draws from none.
+    // The title only — the breadcrumb below names the page, not the selection, and the browser
+    // tab (useDocumentTitle in _layout) stays put as the year is changed.
+    const periode = usePeriodeLabel();
 
     return (
         <div className="mb-8">
             {!isHome && showBreadCrumbs && (
-                <nav aria-label="Breadcrumb" className="mb-5 max-md:hidden">
+                <nav aria-label="Broodkruimelpad" className="mb-5 max-md:hidden">
                     <ol className="flex items-center gap-1.5 text-sm">
                         <li>
-                            <Link to="/" search={true} className="text-fg-quaternary transition duration-100 hover:text-fg-tertiary">
-                                <HomeLine className="size-4" />
+                            <Link
+                                to="/"
+                                search={true}
+                                aria-label="Home"
+                                className="flex size-6 items-center justify-center rounded-sm text-fg-tertiary outline-focus-ring transition duration-100 hover:text-secondary focus-visible:outline-2 focus-visible:outline-offset-2"
+                            >
+                                <HomeLine aria-hidden="true" className="size-4" />
                             </Link>
                         </li>
                         {pathParts.map((part, index) => {
@@ -46,7 +56,15 @@ export function PageHeader({ title, description, children, showBreadCrumbs = tru
                                     {isLast ? (
                                         <span className="font-semibold text-tertiary">{label}</span>
                                     ) : (
-                                        <Link to={path} search={true} className="font-semibold text-tertiary transition duration-100 hover:text-secondary">
+                                        <Link
+                                            to={path}
+                                            search={true}
+                                            // An ancestor crumb is never the current page — the current
+                                            // one is the <span> above. Without `exact`, Link's prefix
+                                            // matching would force aria-current="page" onto it as well.
+                                            activeOptions={{ exact: true }}
+                                            className="font-semibold text-tertiary transition duration-100 hover:text-secondary"
+                                        >
                                             {label}
                                         </Link>
                                     )}
@@ -62,11 +80,14 @@ export function PageHeader({ title, description, children, showBreadCrumbs = tru
                     <h1 className="text-xl font-semibold text-primary md:text-display-xs">
                         {isHome ? (
                             <>
-                                <span className="text-brand-600">Gemeente</span>
+                                <span className="text-brand-700 dark:text-brand-500">Gemeente</span>
                                 <span>financiën</span>
                             </>
                         ) : (
-                            title
+                            <>
+                                {title}
+                                {periode && <span className="font-normal text-tertiary"> ({periode})</span>}
+                            </>
                         )}
                     </h1>
                     {description && <p className="mt-1 text-sm text-tertiary md:text-md">{description}</p>}
@@ -77,16 +98,16 @@ export function PageHeader({ title, description, children, showBreadCrumbs = tru
                     <div className="flex flex-wrap justify-end gap-2">
                         {actions.map((action, i) =>
                             action.href ? (
-                                <Link key={i} to={action.href} search={true}>
-                                    <Button
-                                        color={action.variant === "secondary" ? "secondary" : "primary"}
-                                        iconLeading={action.iconPosition !== "right" ? action.icon : undefined}
-                                        iconTrailing={action.iconPosition === "right" ? action.icon : undefined}
-                                        isDisabled={action.disabled}
-                                    >
-                                        {action.label}
-                                    </Button>
-                                </Link>
+                                <Button
+                                    key={i}
+                                    href={action.href}
+                                    color={action.variant === "secondary" ? "secondary" : "primary"}
+                                    iconLeading={action.iconPosition !== "right" ? action.icon : undefined}
+                                    iconTrailing={action.iconPosition === "right" ? action.icon : undefined}
+                                    isDisabled={action.disabled}
+                                >
+                                    {action.label}
+                                </Button>
                             ) : (
                                 <Button
                                     key={i}

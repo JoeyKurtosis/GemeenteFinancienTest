@@ -40,3 +40,18 @@ export async function changePassword(payload: ChangePasswordPayload): Promise<vo
         throw new Error(data.detail || "Wachtwoord wijzigen mislukt");
     }
 }
+
+/** Permanently deletes the signed-in account. The session is gone once this resolves. */
+export async function deleteAccount(password: string): Promise<void> {
+    const response = await fetch("/api/auth/account/delete/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ password }),
+    });
+
+    if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.detail || "Account verwijderen mislukt");
+    }
+}

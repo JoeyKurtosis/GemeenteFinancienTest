@@ -15,6 +15,9 @@ export interface LoginResponse {
     expires_in_seconds?: number;
 }
 
+/** Signup never returns a session — it always answers with a pending code challenge. */
+export type SignupResponse = Required<Pick<LoginResponse, "requires_2fa">> & LoginResponse;
+
 export interface PasswordResetTokenDetails {
     email: string;
     token: string;
@@ -87,7 +90,7 @@ export async function me(): Promise<User> {
     return response.json();
 }
 
-export async function signup(name: string, email: string, password: string): Promise<User> {
+export async function signup(name: string, email: string, password: string): Promise<SignupResponse> {
     const response = await fetch("/api/auth/signup/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -95,12 +98,12 @@ export async function signup(name: string, email: string, password: string): Pro
         body: JSON.stringify({ name, email, password }),
     });
 
+    const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
         throw new Error(data.detail || "Registratie mislukt");
     }
 
-    return response.json();
+    return data;
 }
 
 // ── Password Reset ──

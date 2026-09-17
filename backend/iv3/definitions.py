@@ -58,9 +58,9 @@ TAAKVELD_RESULTAAT = "0.11"
 # them into a third digit instead: 6.711 Huishoudelijke hulp, 6.712 Begeleiding, and new
 # families like 6.751/6.752/6.753 Jeugdhulp ambulant.
 #
-# The Lasten donuts roll both back up to the parent: drop a trailing letter, then keep two
-# digits after the dot. One rule for both schemes, and the only one that keeps hoofdtaakveld 6
-# readable — 28 slices in 2023 and 26 in 2026 unrolled, 12 and 16 after.
+# Through 2024 the Lasten donuts roll lettered codes up to their parents. From 2025 the
+# dashboard retains the official three-digit codes, including their local/regional/landelijk
+# distinctions. This makes the published task fields visible instead of inventing parent codes.
 #
 # Two digits, not one: 0.61 OZB woningen and 0.62 OZB niet-woningen are taakvelden in their own
 # right and there is no 0.6 for them to belong to. The same goes for 6.21/6.22/6.23.
@@ -314,22 +314,84 @@ HOOFDCATEGORIE_RENTE = "5"
 
 # ── Taakveldnamen ───────────────────────────────────────────────────────────────────
 #
-# The individual taakvelden are labelled from the warehouse rather than from a list here:
-# `taakveldbalanspost` carries the name alongside the code ("0.1 Bestuur"), and
-# sync_iv3_summary lifts it into the Iv3Taakveld table. That keeps 49 of the 55 names
-# authoritative and self-maintaining, which a hand-typed list of 55 would not be — see the
-# CPI_PER_JAAR note at the bottom of this module for how that goes.
-#
-# Six need help, and only these six:
-#
-#   * Four are truncated in the warehouse at ~40 characters, ".." and all. Each is completed
-#     below, and sync_iv3_summary asserts the warehouse's own stem still prefixes what is
-#     written here — so if CBS renames one, the sync says so rather than quietly disagreeing.
-#
-#   * 6.73 and 6.74 have no bare row at all: the warehouse only carries their children
-#     (6.73a Pleegzorg, 6.74c Gesloten plaatsing, ...), because CBS never gave the parents a
-#     name of their own. These two are AUTHORED — there is no stem to check them against, and
-#     they are the one place in this pipeline where a name is invented rather than read.
+# The source carries a code and name together in `taakveldbalanspost`. Historical labels
+# generally follow that source, with a few completions and authored parent labels below.
+# The 2025-2026 list uses the published names throughout: source labels can be abbreviated,
+# and the official three-digit subcodes replace the old, locally grouped parents.
+# Official chapter 3 names for the revised 2025-2026 Iv3 task fields.
+# The warehouse abbreviates several labels; use the published wording in the dashboard.
+TAAKVELD_NAMEN_VANAF_2025 = {
+    "0.1": "Bestuur",
+    "0.2": "Burgerzaken",
+    "0.3": "Beheer overige gebouwen en gronden",
+    "0.4": "Overhead",
+    "0.5": "Treasury",
+    "0.7": "Algemene uitkering en overige uitkeringen gemeentefonds",
+    "0.8": "Overige baten en lasten",
+    "0.9": "Vennootschapsbelasting (Vpb)",
+    "0.10": "Mutaties reserves",
+    "0.11": "Resultaat van de rekening van baten en lasten",
+    "0.61": "OZB woningen",
+    "0.62": "OZB niet-woningen",
+    "0.63": "Parkeerbelasting",
+    "0.64": "Belastingen overig",
+    "1.1": "Crisisbeheersing en brandweer",
+    "1.2": "Openbare orde en veiligheid",
+    "2.1": "Verkeer en vervoer",
+    "2.2": "Parkeren",
+    "2.3": "Recreatieve havens",
+    "2.4": "Economische havens en waterwegen",
+    "2.5": "Openbaar vervoer",
+    "3.1": "Economische ontwikkeling",
+    "3.2": "Fysieke bedrijfsinfrastructuur",
+    "3.3": "Bedrijvenloket en bedrijfsregelingen",
+    "3.4": "Economische promotie",
+    "4.1": "Openbaar basisonderwijs",
+    "4.2": "Onderwijshuisvesting",
+    "4.3": "Onderwijsbeleid en leerlingzaken",
+    "5.1": "Sportbeleid en activering",
+    "5.2": "Sportaccommodaties",
+    "5.3": "Cultuurpresentatie, cultuurproductie en cultuurparticipatie",
+    "5.4": "Musea",
+    "5.5": "Cultureel erfgoed",
+    "5.6": "Media",
+    "5.7": "Openbaar groen en (openlucht) recreatie",
+    "6.1": "Samenkracht en burgerparticipatie",
+    "6.3": "Inkomensregelingen",
+    "6.4": "WSW en beschut werk",
+    "6.5": "Arbeidsparticipatie",
+    "6.21": "Toegang en eerstelijnsvoorzieningen Wmo",
+    "6.22": "Toegang en eerstelijnsvoorzieningen Jeugd",
+    "6.23": "Toegang en eerstelijnsvoorzieningen Integraal",
+    "6.60": "Hulpmiddelen en diensten (Wmo)",
+    "6.91": "Coördinatie en beleid Wmo",
+    "6.92": "Coördinatie en beleid Jeugd",
+    "6.711": "Huishoudelijke hulp (Wmo)",
+    "6.712": "Begeleiding (Wmo)",
+    "6.713": "Dagbesteding (Wmo)",
+    "6.714": "Overige maatwerkarrangementen (Wmo)",
+    "6.751": "Jeugdhulp ambulant lokaal",
+    "6.752": "Jeugdhulp ambulant regionaal",
+    "6.753": "Jeugdhulp ambulant landelijk",
+    "6.761": "Jeugdhulp met verblijf lokaal",
+    "6.762": "Jeugdhulp met verblijf regionaal",
+    "6.763": "Jeugdhulp met verblijf landelijk",
+    "6.791": "PGB Wmo",
+    "6.792": "PGB Jeugd",
+    "6.811": "Beschermd wonen (Wmo)",
+    "6.812": "Maatschappelijke- en vrouwenopvang (Wmo)",
+    "6.821": "Jeugdbescherming",
+    "6.822": "Jeugdreclassering",
+    "7.1": "Volksgezondheid",
+    "7.2": "Riolering",
+    "7.3": "Afval",
+    "7.4": "Milieubeheer",
+    "7.5": "Begraafplaatsen en crematoria",
+    "8.1": "Ruimte en leefomgeving",
+    "8.2": "Grondexploitatie (niet-bedrijventerreinen)",
+    "8.3": "Wonen en bouwen",
+}
+
 TAAKVELD_LABEL_OVERRIDES = {
     # Completed: the warehouse's own name, cut off at ~40 characters. Prefix-checked.
     "0.7": "Algemene uitkeringen en overige uitkeringen gemeentefonds",
@@ -354,8 +416,8 @@ TAAKVELD_LABEL_OVERRIDES = {
 # for a stem to check them against. 6.73/6.74 are the 2024-and-earlier scheme, 6.75/6.76/6.79
 # the one from 2025 — which is why both a 6.73 and a 6.76 mean "Jeugdhulp met verblijf": they
 # are the same money under two numberings, and no year carries both.
-# All of these sit in hoofdtaakveld TAAKVELD_SOCIAAL_DOMEIN, which is what lets the Begroting
-# page take them out of it — see queries.UITGAVEN_HOOFDTAAKVELDEN.
+# All of these belong to TAAKVELD_SOCIAAL_DOMEIN; authored parent labels do not change
+# their classification. The sync also retains a legacy subtotal for these codes.
 TAAKVELD_LABELS_ZONDER_BRON = ("6.73", "6.74", "6.75", "6.76", "6.79")
 
 

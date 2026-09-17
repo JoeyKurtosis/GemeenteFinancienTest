@@ -162,8 +162,9 @@ export const InputBase = ({
       {tooltip && type !== 'password' && (
         <Tooltip title={tooltip} placement="top">
           <TooltipTrigger
+            aria-label={tooltip}
             className={cx(
-              'text-fg-quaternary hover:text-fg-quaternary_hover focus:text-fg-quaternary_hover absolute cursor-pointer transition duration-100 ease-linear group-invalid/input:hidden',
+              'text-fg-tertiary hover:text-secondary outline-focus-ring absolute flex size-6 cursor-pointer items-center justify-center rounded-sm transition duration-100 ease-linear focus-visible:outline-2 focus-visible:outline-offset-2 group-invalid/input:hidden',
               sizes[inputSize].iconTrailing,
               context?.tooltipClassName,
               tooltipClassName
@@ -189,10 +190,11 @@ export const InputBase = ({
       {/* Password visibility toggle */}
       {type === 'password' && (
         <AriaButton
-          aria-label="Toggle password visibility"
+          aria-label={isPasswordVisible ? 'Wachtwoord verbergen' : 'Wachtwoord tonen'}
+          aria-pressed={isPasswordVisible}
           onClick={() => setIsPasswordVisible(!isPasswordVisible)}
           className={cx(
-            'text-fg-quaternary hover:text-fg-quaternary_hover focus:text-fg-quaternary_hover absolute flex cursor-pointer items-center justify-center transition duration-100 ease-linear focus:outline-hidden',
+            'text-fg-quaternary hover:text-fg-quaternary_hover focus:text-fg-quaternary_hover outline-focus-ring absolute flex size-8 cursor-pointer items-center justify-center rounded-md transition duration-100 ease-linear focus-visible:outline-2 focus-visible:outline-offset-2',
             sizes[inputSize].iconTrailing
           )}
         >

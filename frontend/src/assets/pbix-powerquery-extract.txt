@@ -1,0 +1,209 @@
+======================================================================
+-- gemeenten
+======================================================================
+let
+    Bron = SharePoint.Files("https://kurtosisned.sharepoint.com/sites/Sharepoint", [ApiVersion = 15]),
+    GefilterdeRijen = Table.SelectRows(Bron, each [Name] = "gemeenten-alfabetisch-2025.xlsx"),
+    #"inwoneraantallen csv_https://kurtosisned sharepoint com/sites/Sharepoint/Gedeelde documenten/2  Lopende projecten/2022/Kurtosis/Vensters/Open Data-dashboard/Data/Python/" = GefilterdeRijen{[Name="gemeenten-alfabetisch-2025.xlsx",#"Folder Path"="https://kurtosisned.sharepoint.com/sites/Sharepoint/Gedeelde documenten/2. Lopende projecten/2025/Venster dashboard/Gemeentefinanciën/Data/2025/"]}[Content],
+    #"CSV-bestand geïmporteerd" = Excel.Workbook(#"inwoneraantallen csv_https://kurtosisned sharepoint com/sites/Sharepoint/Gedeelde documenten/2  Lopende projecten/2022/Kurtosis/Vensters/Open Data-dashboard/Data/Python/"),
+    Gemeenten_alfabetisch = #"CSV-bestand geïmporteerd"{[Item="Sheet1",Kind="Sheet"]}[Data],
+    #"Headers met verhoogd niveau" = Table.PromoteHeaders(Gemeenten_alfabetisch, [PromoteAllScalars=true]),
+    Aangepast1 = Table.RenameColumns(#"Headers met verhoogd niveau",{{"gemeentenaam", "Gemeentenaam"},{"provincienaam", "Provincienaam"},{"inwoneraantal",  "Inwoneraantal"},{"gemeentecode", "Gemeentecode"},{"gemeentecodegm",  "Gemeentecodegm"},{"provinciecode", "Provinciecode"},{"provinciecodepv",  "Provinciecodepv"},{"jaar",  "Jaar"}}),
+    #"Type gewijzigd" = Table.TransformColumnTypes(Aangepast1,{{"Gemeentecode", type text}, {"Provinciecode", type text}, {"Gemeentenaam", type text}, {"Inwoneraantal", Int64.Type}, {"Jaar", type date}})
+in
+    #"Type gewijzigd"
+
+======================================================================
+-- solvabiliteit
+======================================================================
+let
+    Bron = SharePoint.Files("https://kurtosisned.sharepoint.com/sites/Sharepoint", [ApiVersion = 15]),
+    GefilterdeRijen = Table.SelectRows(Bron, each [Name] = "Financiële kerngetallen - Gemeenten.xlsx"),
+    #"Financiële kengetallen - Gemeenten 2023 xlsx_https://kurtosisned sharepoint com/sites/Sharepoint/Gedeelde documenten/2  Lopende projecten/2022/Kurtosis/Vensters/Open Data-dashboard/Data/Solvabiliteit/" = GefilterdeRijen{[Name="Financiële kerngetallen - Gemeenten.xlsx",#"Folder Path"="https://kurtosisned.sharepoint.com/sites/Sharepoint/Gedeelde documenten/2. Lopende projecten/2025/Venster dashboard/Gemeentefinanciën/Data/2025/"]}[Content],
+    #"Geïmporteerde Excel-werkmap" = Excel.Workbook(#"Financiële kengetallen - Gemeenten 2023 xlsx_https://kurtosisned sharepoint com/sites/Sharepoint/Gedeelde documenten/2  Lopende projecten/2022/Kurtosis/Vensters/Open Data-dashboard/Data/Solvabiliteit/"),
+    omgedraaid_Sheet = #"Geïmporteerde Excel-werkmap"{[Item="omgedraaid",Kind="Sheet"]}[Data],
+    #"Headers met verhoogd niveau" = Table.PromoteHeaders(omgedraaid_Sheet, [PromoteAllScalars=true]),
+    #"Andere kolommen verwijderd" = Table.SelectColumns(#"Headers met verhoogd niveau",{"2025","2024","2023", "2022", "2021", "2020", "2019", "2018", "Indicator", "VerslagSoort", "Gemeenten"}),
+    #"Lege rijen verwijderd" = Table.SelectRows(#"Andere kolommen verwijderd", each not List.IsEmpty(List.RemoveMatchingItems(Record.FieldValues(_), {"", null}))),
+    #"Draaitabel voor andere kolommen opgeheven" = Table.UnpivotOtherColumns(#"Lege rijen verwijderd", {"Indicator", "VerslagSoort", "Gemeenten"}, "Kenmerk", "Waarde"),
+    #"Type gewijzigd2" = Table.TransformColumnTypes(#"Draaitabel voor andere kolommen opgeheven",{{"Waarde", type number}}),
+    #"Aangepaste kolom toegevoegd" = Table.AddColumn(#"Type gewijzigd2", "Aangepast", each [Waarde] / 100),
+    #"Kolommen verwijderd" = Table.RemoveColumns(#"Aangepaste kolom toegevoegd",{"Waarde"}),
+    #"Gedraaide kolom" = Table.Pivot(#"Kolommen verwijderd", List.Distinct(#"Kolommen verwijderd"[Indicator]), "Indicator", "Aangepast", List.Sum),
+    #"Aangepaste kolom toegevoegd1" = Table.AddColumn(#"Gedraaide kolom", "Aangepast", each if [VerslagSoort] = "Begroting"
+then [Kenmerk] & "X000"
+else [Kenmerk] & "X005"),
+    #"Kolommen verwijderd1" = Table.RemoveColumns(#"Aangepaste kolom toegevoegd1",{"VerslagSoort"}),
+    #"Namen van kolommen gewijzigd" = Table.RenameColumns(#"Kolommen verwijderd1",{{"Kenmerk", "Jaar"}}),
+    #"Aangepaste kolom toegevoegd2" = Table.AddColumn(#"Namen van kolommen gewijzigd", "Jaren", each "01-01-" & [Jaar]),
+    #"Type gewijzigd" = Table.TransformColumnTypes(#"Aangepaste kolom toegevoegd2",{{"Jaren", type date}}),
+    #"Kolommen verwijderd2" = Table.RemoveColumns(#"Type gewijzigd",{"Jaar"}),
+    #"Namen van kolommen gewijzigd1" = Table.RenameColumns(#"Kolommen verwijderd2",{{"Jaren", "Jaar"}, {"Aangepast", "Verslagsoort"}, {"Gemeenten", "Gemeentecode"}})
+in
+    #"Namen van kolommen gewijzigd1"
+
+======================================================================
+-- categorieen
+======================================================================
+let
+    Bron = SharePoint.Files("https://kurtosisned.sharepoint.com/sites/Sharepoint", [ApiVersion = 15]),
+    GefilterdeRijen = Table.SelectRows(Bron, each [Name] = "categorien.csv"),
+    #"categorien csv_https://kurtosisned sharepoint com/sites/Sharepoint/Gedeelde documenten/2  Lopende projecten/2022/Kurtosis/Vensters/Open Data VVB- dashboard/Data/CBS/" = GefilterdeRijen{[Name="categorien.csv",#"Folder Path"="https://kurtosisned.sharepoint.com/sites/Sharepoint/Gedeelde documenten/2. Lopende projecten/2025/Venster dashboard/Gemeentefinanciën/Data/2025/"]}[Content],
+    #"CSV-bestand geïmporteerd" = Csv.Document(#"categorien csv_https://kurtosisned sharepoint com/sites/Sharepoint/Gedeelde documenten/2  Lopende projecten/2022/Kurtosis/Vensters/Open Data VVB- dashboard/Data/CBS/",[Delimiter=",", Columns=5, Encoding=65001, QuoteStyle=QuoteStyle.Csv]),
+    #"Headers met verhoogd niveau" = Table.PromoteHeaders(#"CSV-bestand geïmporteerd", [PromoteAllScalars=true]),
+    #"Type gewijzigd" = Table.TransformColumnTypes(#"Headers met verhoogd niveau",{{"", Int64.Type}, {"Key", type text}, {"Title", type text}, {"Description", type text}, {"CategoryGroupID", Int64.Type}}),
+    #"Namen van kolommen gewijzigd" = Table.RenameColumns(#"Type gewijzigd",{{"Title", "Title_categorie"}, {"Key", "Key_categorie"}}),
+    #"Kolommen verwijderd" = Table.RemoveColumns(#"Namen van kolommen gewijzigd",{""}),
+    #"Namen van kolommen gewijzigd1" = Table.RenameColumns(#"Kolommen verwijderd",{{"Description", "Description_categorie"}}),
+    #"Kolommen verwijderd1" = Table.RemoveColumns(#"Namen van kolommen gewijzigd1",{"CategoryGroupID"}),
+    #"Aangepaste kolom toegevoegd" = Table.AddColumn(#"Kolommen verwijderd1", "Lasten 2", each if [Title_categorie] = "L1.1 Salarissen en sociale lasten" then "Salarissen en sociale lasten"
+else if [Title_categorie] = "L3.5.1 Ingeleend personeel" then "Ingeleend personeel"
+else if (
+    [Title_categorie] = "L3.1 Grond" or
+    [Title_categorie] = "L3.2 Duurzame goederen" or
+    [Title_categorie] = "L3.3 Pachten" or
+    [Title_categorie] = "L3.4.1 Sociale uitkeringen in natura" or
+    [Title_categorie] = "L3.8 Overige goederen en diensten"
+) then "Overige goederen en diensten"
+else if Text.Start([Title_categorie], 1) = "L" then "Overige lasten" else "Geen"),
+    #"Aangepaste kolom toegevoegd1" = Table.AddColumn(#"Aangepaste kolom toegevoegd", "Inkomsten per bron 2", each if [Title_categorie] = "B4.3.1 Inkomensoverdrachten - Rijk" then "Rijk"
+else if (
+    [Title_categorie] = "B2.2.1 Belastingen op producenten" or
+    [Title_categorie] = "B2.2.2 Belastingen op huishoudens" or
+    [Title_categorie] = "B3.7 Leges en andere rechten"
+) then "Lokale heffingen"
+else if Text.Start([Title_categorie], 1) = "B" then "Overige inkomsten" 
+else "Geen"),
+    #"Aangepaste kolom toegevoegd2" = Table.AddColumn(#"Aangepaste kolom toegevoegd1", "Overige inkomsten 2", each 
+if [Title_categorie] = "B7.1 Mutatie reserves" then "Bijdragen uit reserves"
+else if [Title_categorie] = "B3.3 Pachten" or [Title_categorie] = "B3.6 Huren" then "Huren en pachten"
+else if [Title_categorie] = "B3.1 Grond" then "Inkomsten uit grond"
+else if [Title_categorie] = "B5.1 Rente" or [Title_categorie] = "B5.2 Dividenden en winsten" then "Rente, dividenden en winsten"
+else if Text.Start([Title_categorie], 1) = "B" then "Overige inkomsten" 
+else "Geen"),
+    #"Aangepaste kolom toegevoegd5" = Table.AddColumn(#"Aangepaste kolom toegevoegd2", "Lasten order", each if [Lasten 2] = "Salarissen en sociale lasten" then 1
+else if [Lasten 2] = "Ingeleend personeel" then 2
+else if [Lasten 2] = "Overige goederen en diensten" then 3
+else if [Lasten 2] = "Overige lasten" then 4
+else 0),
+    #"Aangepaste kolom toegevoegd3" = Table.AddColumn(#"Aangepaste kolom toegevoegd5", "Inkomsten per bron order", each if [Inkomsten per bron 2] = "Rijk" then 1 else if [Inkomsten per bron 2] = "Lokale heffingen" then 2 else if [Inkomsten per bron 2] = "Overige inkomsten" then 3 else 0),
+    #"Aangepaste kolom toegevoegd4" = Table.AddColumn(#"Aangepaste kolom toegevoegd3", "Overige inkomsten order", each if [Overige inkomsten 2] = "Bijdragen uit reserves" then 1
+else if [Overige inkomsten 2] = "Inkomsten uit grond" then 2
+else if [Overige inkomsten 2] = "Huren en pachten" then 3
+else if [Overige inkomsten 2] = "Rente, dividenden en winsten" then 4
+else if [Overige inkomsten 2] = "Overige inkomsten" then 5
+else 0),
+    #"Namen van kolommen gewijzigd2" = Table.RenameColumns(#"Aangepaste kolom toegevoegd4",{{"Lasten 2", "Lasten"}, {"Inkomsten per bron 2", "Inkomsten per bron"}, {"Overige inkomsten 2", "Overige inkomsten"}})
+in
+    #"Namen van kolommen gewijzigd2"
+
+======================================================================
+-- taakvelden
+======================================================================
+let
+    Bron = SharePoint.Files("https://kurtosisned.sharepoint.com/sites/Sharepoint", [ApiVersion = 15]),
+    GefilterdeRijen = Table.SelectRows(Bron, each [Name] = "taakvelden.csv"),
+    #"taakvelden csv_https://kurtosisned sharepoint com/sites/Sharepoint/Gedeelde documenten/2  Lopende projecten/2022/Kurtosis/Vensters/Open Data VVB- dashboard/Data/CBS/" = GefilterdeRijen{[Name="taakvelden.csv",#"Folder Path"="https://kurtosisned.sharepoint.com/sites/Sharepoint/Gedeelde documenten/2. Lopende projecten/2025/Venster dashboard/Gemeentefinanciën/Data/2025/"]}[Content],
+    #"CSV-bestand geïmporteerd" = Csv.Document(#"taakvelden csv_https://kurtosisned sharepoint com/sites/Sharepoint/Gedeelde documenten/2  Lopende projecten/2022/Kurtosis/Vensters/Open Data VVB- dashboard/Data/CBS/",[Delimiter=",", Columns=5, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+    #"Headers met verhoogd niveau" = Table.PromoteHeaders(#"CSV-bestand geïmporteerd", [PromoteAllScalars=true]),
+    #"Type gewijzigd" = Table.TransformColumnTypes(#"Headers met verhoogd niveau",{{"", Int64.Type}, {"Key", type text}, {"Title", type text}, {"Description", type text}, {"CategoryGroupID", Int64.Type}}),
+    #"Kolommen verwijder" = Table.RemoveColumns(#"Type gewijzigd",{""}),
+    #"Namen van kolommen gewijzigd" = Table.RenameColumns(#"Kolommen verwijder",{{"Key", "Key_taakveld"}, {"Title", "Title_taakveld"}, {"Description", "Description_taakveld"}}),
+    #"Kolommen verwijderd1" = Table.RemoveColumns(#"Namen van kolommen gewijzigd",{"CategoryGroupID"}),
+    #"Aangepaste kolom toegevoegd" = Table.AddColumn(#"Kolommen verwijderd1", "Lokale heffingen 2", each if [Title_taakveld] = "7.3 Afval" then "Afvalheffing"
+else if [Title_taakveld] = "0.61 OZB woningen" or [Title_taakveld] = "0.62 OZB niet-woningen" then "Onroerendezaakbelasting"
+else if [Title_taakveld] = "0.63 Parkeerbelasting" then "Parkeerbelasting"
+else if [Title_taakveld] = "7.2 Riolering" then "Rioolheffing"
+else "Overige belastingen en leges"),
+    #"Aangepaste kolom toegevoegd1" = Table.AddColumn(#"Aangepaste kolom toegevoegd", "Lokale heffingen order", each if [Lokale heffingen 2] = "Onroerendezaakbelasting" then 1 else if [Lokale heffingen 2] = "Rioolheffing" then 2 else if [Lokale heffingen 2] = "Afvalheffing" then 3 else if [Lokale heffingen 2] = "Parkeerbelasting" then 4 else if [Lokale heffingen 2] = "Overige belastingen en leges" then 5 else null),
+    #"Namen van kolommen gewijzigd1" = Table.RenameColumns(#"Aangepaste kolom toegevoegd1",{{"Lokale heffingen 2", "Lokale heffingen"}})
+in
+    #"Namen van kolommen gewijzigd1"
+
+======================================================================
+-- verslagsoorten
+======================================================================
+let
+    Bron = SharePoint.Files("https://kurtosisned.sharepoint.com/sites/Sharepoint", [ApiVersion = 15]),
+    GefilterdeRijen = Table.SelectRows(Bron, each [Name] = "verslagsoorten.csv"),
+    #"verslagsoorten csv_https://kurtosisned sharepoint com/sites/Sharepoint/Gedeelde documenten/2  Lopende projecten/2022/Kurtosis/Vensters/Open Data-dashboard/Data/Python/" = GefilterdeRijen{[Name="verslagsoorten.csv",#"Folder Path"="https://kurtosisned.sharepoint.com/sites/Sharepoint/Gedeelde documenten/2. Lopende projecten/2025/Venster dashboard/Gemeentefinanciën/Data/2025/"]}[Content],
+    #"CSV-bestand geïmporteerd" = Csv.Document(#"verslagsoorten csv_https://kurtosisned sharepoint com/sites/Sharepoint/Gedeelde documenten/2  Lopende projecten/2022/Kurtosis/Vensters/Open Data-dashboard/Data/Python/",[Delimiter=",", Columns=4, Encoding=65001, QuoteStyle=QuoteStyle.Csv]),
+    #"Promoted Headers" = Table.PromoteHeaders(#"CSV-bestand geïmporteerd", [PromoteAllScalars=true]),
+    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"ID", Int64.Type}, {"Key", type text}, {"Title", type text}, {"Description", type text}}),
+    #"Removed Columns" = Table.RemoveColumns(#"Changed Type",{"ID"}),
+    #"Rijen gesorteerd" = Table.Sort(#"Removed Columns",{{"Key", Order.Ascending}})
+in
+    #"Rijen gesorteerd"
+
+======================================================================
+-- Inflatie CBS
+======================================================================
+let
+    Bron = Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText("TY7LDcAwCEN3ydkHfg1hlir7r9EEEqkXEOYZ/L5NiEdDYyLQ7vBVBb20NpFI5FjyrXY0O5CknxShmiehP84wHu8X5dQ63Ii4sPqruXBIyGVlS+wwNuI6llGlAlPA1r8Dp18Ywx+3nVNRWdK4nNG9zfkB", BinaryEncoding.Base64), Compression.Deflate)), let _t = ((type nullable text) meta [Serialized.Text = true]) in type table [Jaar = _t, #"Inflatie sinds (accumulative)2018" = _t, #"yoy inflatie" = _t, inkomensinflatie = _t, #"inkomensinflatie sinds 2018" = _t]),
+    #"Type gewijzigd" = Table.TransformColumnTypes(Bron,{{"Jaar", type date}, {"Inflatie sinds (accumulative)2018", type number}, {"yoy inflatie", type number}}),
+    #"Gedeelde kolom" = Table.TransformColumns(#"Type gewijzigd", {{"Inflatie sinds (accumulative)2018", each _ / 100, type number}}),
+    #"Gedeelde kolom1" = Table.TransformColumns(#"Gedeelde kolom", {{"yoy inflatie", each _ / 100, type number}}),
+    #"Vermenigvuldigde kolom" = Table.TransformColumns(#"Gedeelde kolom1", {{"Inflatie sinds (accumulative)2018", each _ * 100, type number}}),
+    #"Type gewijzigd1" = Table.TransformColumnTypes(#"Vermenigvuldigde kolom",{{"Inflatie sinds (accumulative)2018", type number}, {"yoy inflatie", Percentage.Type}, {"inkomensinflatie sinds 2018", type number}}),
+    #"Namen van kolommen gewijzigd" = Table.RenameColumns(#"Type gewijzigd1",{{"Jaar", "Date"}})
+in
+    #"Namen van kolommen gewijzigd"
+
+======================================================================
+-- begrotingen_jaarrekeningen
+======================================================================
+let
+    SourceJaarrekeningen = jaarrekeningen,
+    SourceBegrotingen = begrotingen,
+    // Append the two tables
+    AppendedTables = Table.Combine({SourceBegrotingen, SourceJaarrekeningen})
+in
+    AppendedTables
+
+======================================================================
+-- Inwoneraantallen
+======================================================================
+let
+    Bron = SharePoint.Files("https://kurtosisned.sharepoint.com/sites/Sharepoint", [ApiVersion = 15]),
+    Aangepast1 = Table.SelectRows(Bron, each [Name] = "inwoneraantallen.csv"),
+    Aangepast2 = Aangepast1{[Name="inwoneraantallen.csv",#"Folder Path"="https://kurtosisned.sharepoint.com/sites/Sharepoint/Gedeelde documenten/2. Lopende projecten/2025/Venster dashboard/Gemeentefinanciën/Data/2025/"]}[Content],
+    #"CSV-bestand geïmporteerd" = Csv.Document(Aangepast2,[Delimiter=",", Columns=5, QuoteStyle=QuoteStyle.None]),
+    #"Headers met verhoogd niveau" = Table.PromoteHeaders(#"CSV-bestand geïmporteerd", [PromoteAllScalars=true]),
+    #"Type gewijzigd" = Table.TransformColumnTypes(#"Headers met verhoogd niveau",{{"gemeentecode", type text}, {"Inwoneraantal", Int64.Type}, {"Jaar", type date}, {"provinciecode", type text}, {"Gemeentenaam", type text}})
+in
+    #"Type gewijzigd"
+
+======================================================================
+-- begrotingen  (m_parameter)
+======================================================================
+let
+    Bron = SharePoint.Files("https://kurtosisned.sharepoint.com/sites/Sharepoint", [ApiVersion = 15]),
+    GefilterdeRijen = Table.SelectRows(Bron, each [Name] = "begrotingen2025_nieuwe_categorien.csv"),
+    #"begrotingen_nieuw_2025 csv_https://kurtosisned sharepoint com/sites/Sharepoint/Gedeelde documenten/2  Lopende projecten/2022/Kurtosis/Vensters/Open Data-dashboard/Data/Python/" = GefilterdeRijen{[Name="begrotingen2025_nieuwe_categorien.csv",#"Folder Path"="https://kurtosisned.sharepoint.com/sites/Sharepoint/Gedeelde documenten/2. Lopende projecten/2025/Venster dashboard/Gemeentefinanciën/Data/2025/"]}[Content],
+    #"CSV-bestand geïmporteerd" = Csv.Document(#"begrotingen_nieuw_2025 csv_https://kurtosisned sharepoint com/sites/Sharepoint/Gedeelde documenten/2  Lopende projecten/2022/Kurtosis/Vensters/Open Data-dashboard/Data/Python/",[Delimiter=",", Columns=10, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+    
+    #"Headers met verhoogd niveau" = Table.PromoteHeaders(#"CSV-bestand geïmporteerd", [PromoteAllScalars=true]),
+    #"Geëxtraheerde tekst vóór scheidingsteken" = Table.TransformColumns(#"Headers met verhoogd niveau", {{"k_2ePlaatsing_2", each Text.BeforeDelimiter(_, "."), type text}}),
+    #"Type gewijzigd" = Table.TransformColumnTypes(#"Geëxtraheerde tekst vóór scheidingsteken",{{"", Int64.Type}, {"ID", Int64.Type}, {"Categorie", type text}, {"Gemeenten", type text}, {"Verslagsoort", type text}, {"k_2ePlaatsing_2", Int64.Type}, {"Year", type date}, {"Inwoneraantal", Int64.Type}}),
+    #"Kolommen verwijderd" = Table.RemoveColumns(#"Type gewijzigd",{"", "ID", "_1"}),
+    #"Aangepaste kolom toegevoegd" = Table.AddColumn(#"Kolommen verwijderd", "bedrag_per_inwoner", each [k_2ePlaatsing_2] / [Inwoneraantal] * 1000)
+in
+    #"Aangepaste kolom toegevoegd"
+
+======================================================================
+-- jaarrekeningen  (m_parameter)
+======================================================================
+let
+    Bron = SharePoint.Files("https://kurtosisned.sharepoint.com/sites/Sharepoint", [ApiVersion = 15]),
+    GefilterdeRijen = Table.SelectRows(Bron, each [Name] = "jaarrekeningen2025_nieuwe_categorien.csv"),
+    #"jaarrekeningen_nieuw_2024 csv_https://kurtosisned sharepoint com/sites/Sharepoint/Gedeelde documenten/2  Lopende projecten/2022/Kurtosis/Vensters/Open Data-dashboard/Data/Python/" = GefilterdeRijen{[Name="jaarrekeningen2025_nieuwe_categorien.csv",#"Folder Path"="https://kurtosisned.sharepoint.com/sites/Sharepoint/Gedeelde documenten/2. Lopende projecten/2025/Venster dashboard/Gemeentefinanciën/Data/2025/"]}[Content],
+    #"CSV-bestand geïmporteerd" = Csv.Document(#"jaarrekeningen_nieuw_2024 csv_https://kurtosisned sharepoint com/sites/Sharepoint/Gedeelde documenten/2  Lopende projecten/2022/Kurtosis/Vensters/Open Data-dashboard/Data/Python/",[Delimiter=",", Columns=11, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+    #"Kolommen verwijderd" = Table.RemoveColumns(#"CSV-bestand geïmporteerd",{"Column1"}),
+    #"Headers met verhoogd niveau" = Table.PromoteHeaders(#"Kolommen verwijderd", [PromoteAllScalars=true]),
+    #"Geëxtraheerde tekst vóór scheidingsteken" = Table.TransformColumns(#"Headers met verhoogd niveau", {{"k_2ePlaatsing_2", each Text.BeforeDelimiter(_, "."), type text}}),
+    #"Type gewijzigd" = Table.TransformColumnTypes(#"Geëxtraheerde tekst vóór scheidingsteken",{{"ID", Int64.Type}, {"Categorie", type text}, {"Gemeenten", type text}, {"Verslagsoort", type text}, {"k_2ePlaatsing_2", Int64.Type}, {"Year", type date}, {"Inwoneraantal", Int64.Type}}),
+    #"Kolommen verwijderd1" = Table.RemoveColumns(#"Type gewijzigd",{"", "_1"}),
+    #"Aangepaste kolom toegevoegd" = Table.AddColumn(#"Kolommen verwijderd1", "bedrag_per_inwoner", each [k_2ePlaatsing_2] / [Inwoneraantal] * 1000),
+    #"Kolommen verwijderd2" = Table.RemoveColumns(#"Aangepaste kolom toegevoegd",{"ID"})
+in
+    #"Kolommen verwijderd2"

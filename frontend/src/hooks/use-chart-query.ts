@@ -34,8 +34,8 @@ interface ChartQueryOptions<TData, TParams extends object> {
  *   The figures behind them are a year old — CBS publishes annually — so the cache never goes
  *   stale within a session (staleTime: Infinity, set on the QueryClient in main.tsx).
  * - **The charts stop blanking on every filter change.** `keepPreviousData` leaves the previous
- *   response on screen while the new one loads, so pressing Toepassen redraws the charts instead
- *   of replacing all fourteen of them with grey blocks and re-mounting them a moment later.
+ *   response on screen while an immediately applied selection loads, instead of replacing all
+ *   fourteen charts with grey blocks and re-mounting them a moment later.
  *
  * `params` goes into the queryKey as an object. React Query hashes it with its keys sorted, so
  * a fresh object literal every render is fine — identity does not matter, only the values do.

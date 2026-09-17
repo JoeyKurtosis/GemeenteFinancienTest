@@ -1,4 +1,5 @@
-import { type ChartSeries, type ChartType, type ValueFormat, formatValue } from "@/components/charts/chart-card";
+import type { ChartSeries, ChartType } from "@/components/charts/chart-card";
+import { formatValue, type ValueFormat } from "@/components/charts/chart-format";
 import type { HighlightCardData } from "@/components/charts/highlight-card";
 import type { Cohort, LijnPunt, Managementoverzicht } from "../api";
 
@@ -66,17 +67,14 @@ function highlights(rows: LijnPunt[], cohorten: Cohort[], valueFormat: ValueForm
 }
 
 /**
- * Whole euros, on the axis and in the tooltip alike.
+ * The rows a card's highlights are derived from, rounded to the whole euros the card prints.
  *
- * A cent of a euro-per-inwoner figure is noise — these are a gemeente's whole payroll divided by
- * its population — and the page was drawn to read "€ 3.116" rather than "€ 3.116,42". Rounded
- * here rather than in `formatValue`, whose "euro" branch the Begroting, Lasten and Baten pages
- * all read through: this is a decision about this page, not about how the dashboard prints euros.
- *
- * The figures are rounded before the highlights are derived from them, so a card's change
- * percentage is the one its own two numbers actually imply.
+ * Only the highlights read these. A card prints "€ 3.116" and, beneath it, "1,4%" — and that
+ * percentage has to be the one its own two printed numbers imply, which it is not if it comes
+ * from 3116,42 against 3072,09. The chart itself is fed the unrounded rows, so its axis can
+ * round (`formatValue`) while its tooltip does not (`formatTooltipValue`).
  */
-function heleEuros(rows: LijnPunt[]): LijnPunt[] {
+function afgerondeRijen(rows: LijnPunt[]): LijnPunt[] {
     return rows.map((punt) =>
         Object.fromEntries(Object.entries(punt).map(([key, waarde]) => [key, typeof waarde === "number" ? Math.round(waarde) : waarde])),
     ) as LijnPunt[];
@@ -108,14 +106,14 @@ function kaart(
 ): ManagementKaart {
     // The solvabiliteit keeps its decimals: it is a ratio between 0 and 100, where a tenth is a
     // real difference between two gemeenten rather than a rounding artefact.
-    const punten = valueFormat === "euro" ? heleEuros(rows) : rows;
+    const punten = valueFormat === "euro" ? afgerondeRijen(rows) : rows;
 
     return {
         title,
         description,
         source,
         highlights: highlights(punten, cohorten, valueFormat),
-        data: punten,
+        data: rows,
         series: cohortSeries(cohorten),
         chartType: "area",
         valueFormat,

@@ -1,19 +1,20 @@
 import React from "react";
-import { Button, Hr, Section, Text } from "@react-email/components";
+import { Button, Link, Section, Text } from "@react-email/components";
 import { BaseLayout } from "./base-layout";
+import { button, buttonContainer, heading, link, mutedText, paragraph, signature } from "./theme";
 
 interface PasswordResetEmailProps {
     resetUrl?: string;
 }
 
-export default function PasswordResetEmail({ resetUrl = "https://gemeentefinancien.nl/password-reset?token=example" }: PasswordResetEmailProps) {
+export default function PasswordResetEmail({ resetUrl = "https://gemeentefinancien.test.kurtosis.nl/password-reset?token=example" }: PasswordResetEmailProps) {
     return (
         <BaseLayout preview="Reset je wachtwoord voor Gemeentefinanciën">
             <Text style={heading}>Wachtwoord resetten</Text>
 
-            <Text style={paragraph}>Je hebt een aanvraag gedaan om je wachtwoord te resetten.</Text>
-
-            <Text style={paragraph}>Gebruik de knop hieronder om een nieuw wachtwoord in te stellen:</Text>
+            <Text style={paragraph}>
+                Je hebt een aanvraag gedaan om je wachtwoord te resetten. Gebruik de knop hieronder om een nieuw wachtwoord in te stellen.
+            </Text>
 
             <Section style={buttonContainer}>
                 <Button style={button} href={resetUrl}>
@@ -21,83 +22,30 @@ export default function PasswordResetEmail({ resetUrl = "https://gemeentefinanci
                 </Button>
             </Section>
 
-            <Section style={detailBox}>
-                <Text style={detailLabel}>Geldigheid</Text>
-                <Text style={detailValue}>Deze link is 1 uur geldig.</Text>
-                <Hr style={detailDivider} />
-                <Text style={detailLabel}>Niet aangevraagd?</Text>
-                <Text style={detailValue}>Als je dit niet hebt aangevraagd, kun je deze e-mail negeren.</Text>
-            </Section>
+            {/* Spelling the URL out is not just a fallback for clients that strip the button: a
+                reset mail with no visible destination reads as phishing. */}
+            <Text style={mutedText}>Werkt de knop niet? Plak deze link in je browser:</Text>
+            <Text style={fallbackLinkContainer}>
+                <Link style={link} href={resetUrl}>
+                    {resetUrl}
+                </Link>
+            </Text>
 
-            <Text style={paragraph}>Met vriendelijke groet,</Text>
+            <Text style={mutedText}>Deze link is 1 uur geldig. Als je dit niet hebt aangevraagd, kun je deze e-mail negeren.</Text>
+
+            <Text style={closing}>Met vriendelijke groet,</Text>
             <Text style={signature}>Het Gemeentefinanciën team</Text>
         </BaseLayout>
     );
 }
 
-const heading = {
-    margin: "0 0 20px",
-    fontSize: "22px",
-    fontWeight: "600" as const,
-    color: "#101828",
-    lineHeight: "1.35",
-};
-
-const paragraph = {
-    margin: "0 0 16px",
-    fontSize: "15px",
-    color: "#475467",
-    lineHeight: "1.6",
-};
-
-const buttonContainer = {
+const fallbackLinkContainer = {
     margin: "0 0 24px",
-};
-
-const button = {
-    display: "inline-block" as const,
-    padding: "12px 18px",
-    borderRadius: "8px",
-    backgroundColor: "#101828",
-    color: "#ffffff",
     fontSize: "14px",
-    fontWeight: "600" as const,
-    textDecoration: "none",
+    lineHeight: "1.5",
 };
 
-const detailBox = {
-    backgroundColor: "#f9fafb",
-    border: "1px solid #e4e7ec",
-    borderRadius: "8px",
-    padding: "14px 20px",
-    marginBottom: "28px",
-};
-
-const detailLabel = {
-    margin: "0 0 2px",
-    fontSize: "12px",
-    fontWeight: "600" as const,
-    color: "#98a2b3",
-    letterSpacing: "0.4px",
-    textTransform: "uppercase" as const,
-};
-
-const detailValue = {
-    margin: "0",
-    fontSize: "14px",
-    color: "#344054",
-    lineHeight: "1.6",
-};
-
-const detailDivider = {
-    borderColor: "#e4e7ec",
-    margin: "12px 0",
-};
-
-const signature = {
-    margin: "0",
-    fontSize: "15px",
-    fontWeight: "600" as const,
-    color: "#101828",
-    lineHeight: "1.6",
+const closing = {
+    ...paragraph,
+    margin: "24px 0 4px",
 };

@@ -14,7 +14,34 @@ export interface FiltersSearch {
     verslagsoort?: string;
     jaar?: number;
     reserve?: boolean;
+    /** Dashboard page to return to after composing a referentiegroep. */
+    terug?: string;
 }
+
+/** The keys `FiltersSearch` declares — keep the two in step. */
+export const FILTER_SEARCH_KEYS = ["gemeente", "referentie", "inwoner", "verslagsoort", "jaar", "reserve", "terug"] as const;
+
+/**
+ * Route `search.middlewares` entry for a route that has no filters — the auth pages, which are
+ * siblings of /_layout rather than children of it, so neither the params nor the FiltersProvider
+ * that owns them belong there.
+ *
+ * They arrive anyway without this: every internal link carries `search={true}` (see the Link in
+ * buttons/button.tsx, which covers every `Button href=`), because that is what keeps the applied
+ * filters alive while browsing the dashboard. Stripping at the destination rather than unsetting
+ * `search` per link means it holds for any route in, and the router applies it while *building*
+ * the location — the rendered href is already clean, so nothing has to be corrected afterwards.
+ *
+ * Hand-written rather than the router's `stripSearchParams`, so one value fits the differing
+ * search schemas of the auth routes ({}, { token }, { intent }) without a cast at each of them.
+ */
+export const stripFiltersSearch = <T,>({ search, next }: { search: T; next: (s: T) => T }): T => {
+    const result = { ...next(search) } as Record<string, unknown>;
+    for (const key of FILTER_SEARCH_KEYS) {
+        delete result[key];
+    }
+    return result as T;
+};
 
 /** Route `validateSearch`. Anything unparseable is dropped rather than throwing. */
 export const validateFiltersSearch = (search: Record<string, unknown>): FiltersSearch => {
@@ -38,6 +65,12 @@ export const validateFiltersSearch = (search: Record<string, unknown>): FiltersS
         parsed.reserve = true;
     } else if (search.reserve === false || search.reserve === "false") {
         parsed.reserve = false;
+    }
+
+    const terug = search.terug;
+    // Only accept an internal dashboard path. This value is used as a navigation target.
+    if (typeof terug === "string" && terug.startsWith("/") && !terug.startsWith("//") && terug !== "/referentiegroep") {
+        parsed.terug = terug;
     }
 
     return parsed;
@@ -64,6 +97,15 @@ export const GEEN_SELECTIE = "geen";
 export const isSentinelSelectie = (value?: string) => value === ALLE_SELECTIE || value === GEEN_SELECTIE;
 
 export const parseCodes = (value?: string): string[] => (value ? value.split(",").filter(Boolean) : []);
+
+/** Compare membership while preserving the distinct unset, all, and empty states. */
+export const isSameSelectie = (a?: string, b?: string): boolean => {
+    if (a === b) return true;
+    if (a === undefined || b === undefined || isSentinelSelectie(a) || isSentinelSelectie(b)) return false;
+    const left = new Set(parseCodes(a));
+    const right = new Set(parseCodes(b));
+    return left.size === right.size && [...left].every((code) => right.has(code));
+};
 
 /** Empty selections are dropped from the URL rather than serialised as `?referentie=`. */
 export const serializeCodes = (codes: string[]): string | undefined => (codes.length > 0 ? codes.join(",") : undefined);

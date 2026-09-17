@@ -1,1 +1,1 @@
-export { ManagementoverzichtRouteView } from "./components/managementoverzicht-route-view";
+export { ManagementoverzichtSection } from "./components/managementoverzicht-section";

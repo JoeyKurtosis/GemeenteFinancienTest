@@ -1,20 +1,17 @@
 import { useLocation } from "@tanstack/react-router";
 
 /** Route prefixes where the "Reservemutaties" toggle is relevant (matches sub-routes too). */
-const reservemutatiesRoutes = ["/begroting", "/baten", "/lasten", "/trends", "/managementoverzicht"];
-
-/** Route prefixes where the "Verslagsoort" filter is relevant (matches sub-routes too). */
-const verslagsoortRoutes = ["/trends", "/benchmark", "/baten", "/managementoverzicht"];
+const reservemutatiesRoutes = ["/in-een-oogopslag", "/begroting-vs-jaarrekening", "/baten", "/lasten", "/trends"];
 
 /**
- * Routes where "Verslagsoort" applies to the index page and *not* to its sub-routes.
+ * Route prefixes where the "Verslagsoort" filter is relevant (matches sub-routes too).
  *
- * /begroting alone: its overzicht tab is drawn from one report like every other page, but the
- * two begroting-vs-jaarrekening tabs put both verslagsoorten on the category axis and compare
- * them against each other. Picking one there answers nothing — queries.begroting sends those
- * two down _begroting_per_verslagsoort, which never reads the selected code.
+ * /begroting-vs-jaarrekening is deliberately absent: it puts both verslagsoorten on the
+ * category axis and compares them against each other, so picking one answers nothing —
+ * queries.begroting sends its two weergaven down _begroting_per_verslagsoort, which never
+ * reads the selected code. /in-een-oogopslag is drawn from one report like every other page.
  */
-const verslagsoortIndexRoutes = ["/begroting"];
+const verslagsoortRoutes = ["/in-een-oogopslag", "/trends", "/benchmark", "/baten"];
 
 /**
  * Routes the filter summary appears on: the main navigation.
@@ -28,9 +25,19 @@ const verslagsoortIndexRoutes = ["/begroting"];
  * The utility pages are left out (/account, /instellingen, /support): nothing there is a figure,
  * so a filter panel beside them is noise.
  */
-const gefilterdeRoutes = ["/referentiegroep", "/managementoverzicht", "/verantwoording", "/begroting", "/lasten", "/benchmark", "/baten", "/trends"];
+const gefilterdeRoutes = [
+    "/referentiegroep",
+    "/verantwoording",
+    "/in-een-oogopslag",
+    "/begroting-vs-jaarrekening",
+    "/lasten",
+    "/benchmark",
+    "/baten",
+    "/trends",
+];
 
-const opRoute = (pathname: string, route: string) => pathname === route || pathname.startsWith(`${route}/`);
+/** A route prefix matches its own path and everything under it, never a sibling that shares its start. */
+export const opRoute = (pathname: string, route: string) => pathname === route || pathname.startsWith(`${route}/`);
 
 export interface FilterRelevance {
     /** The single gemeente a page holds against a group. */
@@ -48,13 +55,9 @@ export interface FilterRelevance {
 /**
  * Which filters the route being viewed actually draws with.
  *
- * Shared between the sidebar's filter menu and the summary row above the charts, which have to
- * agree: a chip describing a filter the menu does not offer here would be describing something
- * the reader cannot act on, and cannot see.
- *
- * Route relevance only. The sidebar additionally hides Verslagsoort when the selected year offers
- * a single one — a statement about the data rather than about the route, so it stays at that call
- * site.
+ * Shared between the sidebar's filter menu and the applied filter summary. The sidebar keeps
+ * Verslagsoort visible on every route and uses relevance to explain when it has no effect.
+ * Whether it offers a dropdown or a fixed value depends on the selected year's available data.
  */
 export function useFilterRelevance(): FilterRelevance {
     const { pathname } = useLocation();
@@ -69,9 +72,7 @@ export function useFilterRelevance(): FilterRelevance {
         referentie: true,
         referentieLabel: isTrends ? "Gemeente" : "Referentiegroep",
         inwoner: isTrends,
-        verslagsoort:
-            verslagsoortRoutes.some((route) => opRoute(pathname, route)) ||
-            verslagsoortIndexRoutes.some((route) => pathname === route || pathname === `${route}/`),
+        verslagsoort: verslagsoortRoutes.some((route) => opRoute(pathname, route)),
         reservemutaties: reservemutatiesRoutes.some((route) => opRoute(pathname, route)),
         // The dashboard index is matched exactly — every path starts with "/", so opRoute would
         // let the summary onto the utility pages too.

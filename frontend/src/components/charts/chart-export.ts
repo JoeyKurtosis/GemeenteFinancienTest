@@ -1,5 +1,6 @@
 import type { Cell, SheetData } from "write-excel-file/browser";
-import type { ChartSeries, ValueFormat } from "@/components/charts/chart-card";
+import type { ChartSeries } from "@/components/charts/chart-card";
+import type { ValueFormat } from "@/components/charts/chart-format";
 import type { FilterRegel } from "@/features/filters";
 
 /**
@@ -25,10 +26,14 @@ export interface ChartSheet {
  * 0–100 scale, and the built-in percent format multiplies by 100 on top of that.
  *
  * `euro-compact` is a reading form of the screen ("€ 80,5 mln."), not of a rekenblad — a
- * spreadsheet gets the whole number.
+ * spreadsheet gets the whole number, and cents on a figure that size would be absurd.
+ *
+ * `euro` shows its cents, where the chart's own labels round them off. A rekenblad is where
+ * exactness is the point: the cells carry the measured figure either way, and printing it in
+ * full is what keeps the segment columns visibly adding up to the Totaal column.
  */
 const EXCEL_FORMAT: Record<ValueFormat, string> = {
-    euro: '"€" #,##0',
+    euro: '"€" #,##0.00',
     "euro-compact": '"€" #,##0',
     percent: '0.00"%"',
     index: "#,##0.0",
@@ -76,6 +81,8 @@ interface ChartSheetInput {
     valueFormat?: ValueFormat;
     /** See the note below on why this changes how the figures are printed. */
     normalize?: boolean;
+    /** Shares of each row's stack, or of each column's donut. Omit for independent series. */
+    shareBasis?: "row" | "column";
     /** The measured total per row, printed in a trailing "Totaal" column. */
     totals?: number[];
     /** A closing row summing the columns — the donut pair's centre totals. */
@@ -98,6 +105,7 @@ export function buildChartSheet({
     xAxisLabel,
     valueFormat = "euro",
     normalize = false,
+    shareBasis,
     totals,
     totalRow,
     context,
@@ -119,12 +127,36 @@ export function buildChartSheet({
     rows.push([]);
 
     const heeftTotalen = Array.isArray(totals) && totals.length > 0;
-    rows.push([kopCel(xAxisLabel ?? ""), ...series.map((reeks) => kopCel(reeks.name)), ...(heeftTotalen ? [kopCel("Totaal")] : [])]);
+    const percentageFormat = "0.00%";
+    const getal = (value: unknown): number | null => {
+        if (value === null || value === undefined || value === "") return null;
+        const number = Number(value);
+        return Number.isFinite(number) ? number : null;
+    };
+    const columnTotals = shareBasis === "column"
+        ? series.map((reeks) => data.reduce((sum, rij) => sum + (getal(rij[reeks.key]) ?? 0), 0))
+        : [];
+    const percentageCel = (value: unknown, denominator: number): Cell => {
+        const part = getal(value);
+        return part !== null && part >= 0 && denominator > 0 && Number.isFinite(denominator)
+            ? { type: Number, value: part / denominator, format: percentageFormat }
+            : null;
+    };
+
+    rows.push([
+        kopCel(xAxisLabel ?? ""),
+        ...series.flatMap((reeks) => [kopCel(reeks.name), ...(shareBasis ? [kopCel(`${reeks.name} %`)] : [])]),
+        ...(heeftTotalen ? [kopCel("Totaal")] : []),
+    ]);
 
     data.forEach((rij, index) => {
+        const rowTotal = shareBasis === "row" ? series.reduce((sum, reeks) => sum + (getal(rij[reeks.key]) ?? 0), 0) : 0;
         rows.push([
             { type: String, value: String(rij[xAxisKey] ?? "") },
-            ...series.map((reeks) => bedragCel(rij[reeks.key], format)),
+            ...series.flatMap((reeks, seriesIndex) => [
+                bedragCel(rij[reeks.key], format),
+                ...(shareBasis ? [percentageCel(rij[reeks.key], shareBasis === "row" ? rowTotal : columnTotals[seriesIndex])] : []),
+            ]),
             // The measured total, not the sum of the segments: each segment is rounded on its way
             // here and the rounding does not cancel. Same reason ChartCard takes a `totals` prop.
             ...(heeftTotalen ? [bedragCel(totals?.[index], format)] : []),
@@ -134,9 +166,9 @@ export function buildChartSheet({
     if (totalRow) {
         rows.push([
             kopCel(totalRow.label),
-            ...totalRow.values.map((waarde) => {
+            ...totalRow.values.flatMap((waarde) => {
                 const cel = bedragCel(waarde, format);
-                return cel ? ({ ...cel, fontWeight: "bold" } as Cell) : null;
+                return [cel ? ({ ...cel, fontWeight: "bold" } as Cell) : null, ...(shareBasis ? [null] : [])];
             }),
         ]);
     }
@@ -145,7 +177,7 @@ export function buildChartSheet({
         rows,
         // The first column carries gemeente and taakveld names, which run long; the rest hold one
         // figure each.
-        columns: [{ width: 34 }, ...series.map(() => ({ width: 18 })), ...(heeftTotalen ? [{ width: 18 }] : [])],
+        columns: [{ width: 34 }, ...series.flatMap(() => [{ width: 18 }, ...(shareBasis ? [{ width: 18 }] : [])]), ...(heeftTotalen ? [{ width: 18 }] : [])],
         sheet: sheetName(title),
     };
 }

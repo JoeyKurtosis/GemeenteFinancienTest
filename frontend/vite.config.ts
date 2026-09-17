@@ -15,6 +15,7 @@ export default defineConfig({
         },
     },
     server: {
+        allowedHosts: ["003f-31-20-237-192.ngrok-free.app"],
         proxy: {
             // Object form rather than the string shorthand so the SSE stream from
             // /api/chat/ has somewhere to declare its needs. Vite's proxy passes

@@ -22,8 +22,9 @@ const lastenTabs: SectionTab[] = [
 
 /**
  * Shared layout for every Lasten page. Renders the section tab navigation, then a 2-column
- * grid: Uitleg + Trend (row 1), Referentiegroep ranking + per-categorie stacked bar (row 2),
- * full-width taakveld donut comparison.
+ * grid: the full-width taakveld donut comparison, Trend + per-categorie stacked bar (row 2),
+ * and the Referentiegroep ranking last. The page's uitleg is not in the grid — it
+ * sits under the title in the PageHeader, fed by each route's `subContent` (lasten-uitleg.tsx).
  *
  * The ten pages are one layout over a different slice of the lasten — `taakveld` picks both
  * the copy (LASTEN_PAGINAS) and what the backend measures (iv3/queries.py): "alle" for the
@@ -51,14 +52,30 @@ export function LastenPageView({ taakveld }: { taakveld: LastenTaakveld }) {
     const categorie = data?.categorie ?? null;
     const categorieData = (categorie?.data ?? []).filter((row) => row.key !== "landelijk");
 
-    const chartIds = [`lasten:Trend:${taakveld}`, `lasten:Referentiegroep:${taakveld}`, `lasten:Lasten per inwoner per categorie:${taakveld}`];
+    // The donut's heading is the page's own copy rather than a fixed one, so its id is built
+    // from it — the code on the end is what keeps the ten pages' notes apart.
+    const donutChartId = `lasten:${pagina.donutTitle}:${taakveld}`;
+    const chartIds = [`lasten:Trend:${taakveld}`, `lasten:Referentiegroep:${taakveld}`, `lasten:Lasten per inwoner per categorie:${taakveld}`, donutChartId];
     const { commentsMap, invalidate } = useChartComments(chartIds);
 
     return (
         <div className="flex flex-col gap-6">
-            <SectionTabs items={lastenTabs} />
+            <SectionTabs items={lastenTabs} label="Lasten" />
             <section className="grid gap-6 lg:grid-cols-2">
-                <InfoCard title="Uitleg" paragraphs={pagina.uitlegParagraphs} />
+                {(verdeling || isLoading) && (
+                    <DonutComparisonCard
+                        title={pagina.donutTitle}
+                        isLoading={isLoading || !verdeling}
+                        categories={verdeling ? verdelingCategories(verdeling) : []}
+                        left={verdeling ? donutSide(verdeling, verdeling.links) : null}
+                        right={verdeling ? donutSide(verdeling, verdeling.rechts) : null}
+                        expandable
+                        className="col-span-2"
+                        chartId={donutChartId}
+                        comment={commentsMap.get(donutChartId)}
+                        onCommentChange={invalidate}
+                    />
+                )}
 
                 <ChartCard
                     title="Trend"
@@ -72,16 +89,17 @@ export function LastenPageView({ taakveld }: { taakveld: LastenTaakveld }) {
                     onCommentChange={invalidate}
                 />
 
-                {verdeling && (
-                    <DonutComparisonCard
-                        title={pagina.donutTitle}
-                        categories={verdelingCategories(verdeling)}
-                        left={donutSide(verdeling, verdeling.links)}
-                        right={donutSide(verdeling, verdeling.rechts)}
-                        expandable
-                        className="col-span-2"
-                    />
-                )}
+                <ChartCard
+                    title="Lasten per inwoner per categorie"
+                    data={categorieData}
+                    series={categorieSeries(categorie)}
+                    chartType="horizontal-bar"
+                    isLoading={isLoading}
+                    expandable
+                    chartId={`lasten:Lasten per inwoner per categorie:${taakveld}`}
+                    comment={commentsMap.get(`lasten:Lasten per inwoner per categorie:${taakveld}`)}
+                    onCommentChange={invalidate}
+                />
 
                 {/* Without a referentiegroep there are no gemeenten to draw, so the card says
                     so rather than showing an empty chart. */}
@@ -102,18 +120,6 @@ export function LastenPageView({ taakveld }: { taakveld: LastenTaakveld }) {
                 ) : (
                     <InfoCard title="Referentiegroep" paragraphs={["Kies gemeenten in de referentiegroep om hun lasten naast elkaar te zien."]} />
                 )}
-
-                <ChartCard
-                    title="Lasten per inwoner per categorie"
-                    data={categorieData}
-                    series={categorieSeries(categorie)}
-                    chartType="horizontal-bar"
-                    isLoading={isLoading}
-                    expandable
-                    chartId={`lasten:Lasten per inwoner per categorie:${taakveld}`}
-                    comment={commentsMap.get(`lasten:Lasten per inwoner per categorie:${taakveld}`)}
-                    onCommentChange={invalidate}
-                />
             </section>
         </div>
     );

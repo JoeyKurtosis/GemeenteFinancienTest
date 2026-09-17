@@ -44,13 +44,12 @@ export interface FilterRegels {
 /**
  * What the charts are currently filtered to, as label/value pairs.
  *
- * Shared by FilterSummary — the panel under the sidebar's Filters button — and by the Excel export
- * behind each chart's download button, which prints these same rows above the figures. Those two
- * must agree: a downloaded sheet describing different filters than the sidebar shows would be
- * describing a chart the reader never saw.
+ * Read by the Excel export behind each chart's download button, which prints these rows above the
+ * figures, and by FilterSummary, which renders the same pairs as a panel. The sheet and the screen
+ * must agree: a download describing different filters than the sidebar shows would be describing a
+ * chart the reader never saw.
  *
- * Reads the *applied* filters, never the draft: this has to agree with the charts, and the draft
- * is what the sidebar is still being told, not what was asked of the backend.
+ * Reads the URL-backed filters so the summary always agrees with the charts and sidebar.
  */
 export function useFilterRegels(): FilterRegels {
     const { applied, options, isLoading } = useFilters();

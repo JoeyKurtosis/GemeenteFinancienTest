@@ -1,6 +1,7 @@
 import React from "react";
-import { Body, Container, Head, Html, Preview, Section, Text } from "@react-email/components";
 import type { ReactNode } from "react";
+import { Body, Container, Head, Hr, Html, Img, Preview, Section, Text } from "@react-email/components";
+import { LOGO_HEIGHT, LOGO_URL, LOGO_WIDTH, colors, divider, fontFamily } from "./theme";
 
 interface BaseLayoutProps {
     preview: string;
@@ -14,8 +15,15 @@ export function BaseLayout({ preview, children }: BaseLayoutProps) {
             <Preview>{preview}</Preview>
             <Body style={body}>
                 <Container style={container}>
-                    <Section style={card}>{children}</Section>
-                    <Section style={footer}>
+                    <Section style={logoHeader}>
+                        <Img src={LOGO_URL} width={LOGO_WIDTH} height={LOGO_HEIGHT} alt="Venster" style={logo} />
+                    </Section>
+
+                    <Section style={card}>
+                        {children}
+
+                        <Hr style={divider} />
+
                         <Text style={footerText}>
                             Dit is een automatisch gegenereerd bericht vanuit Gemeentefinanciën.
                             <br />
@@ -29,34 +37,37 @@ export function BaseLayout({ preview, children }: BaseLayoutProps) {
 }
 
 const body = {
-    backgroundColor: "#f9fafb",
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif",
+    backgroundColor: colors.gray100,
+    fontFamily,
     margin: "0",
     padding: "0",
     WebkitFontSmoothing: "antialiased" as const,
 };
 
 const container = {
-    maxWidth: "580px",
+    maxWidth: "600px",
     margin: "0 auto",
     padding: "40px 16px",
 };
 
-const card = {
-    backgroundColor: "#ffffff",
-    borderRadius: "12px",
-    border: "1px solid #e4e7ec",
-    padding: "36px 40px 32px",
+const logoHeader = {
+    padding: "0 0 24px",
 };
 
-const footer = {
-    padding: "24px 8px 0",
-    textAlign: "center" as const,
+const logo = {
+    display: "block" as const,
+};
+
+const card = {
+    backgroundColor: colors.white,
+    borderRadius: "12px",
+    border: `1px solid ${colors.gray200}`,
+    padding: "40px",
 };
 
 const footerText = {
     margin: "0",
-    fontSize: "12px",
-    color: "#98a2b3",
-    lineHeight: "1.6",
+    fontSize: "14px",
+    color: colors.gray500,
+    lineHeight: "1.5",
 };

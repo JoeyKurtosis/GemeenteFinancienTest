@@ -2,10 +2,10 @@
 
 import type { FC, HTMLAttributes, MouseEventHandler } from "react";
 import { useCallback, useEffect, useRef } from "react";
-import type { Placement } from "react-aria-components";
 import { Link } from "@tanstack/react-router";
 import { ChevronSelectorVertical, LogIn01, LogOut01, Moon01, User01 } from "@untitledui/icons";
 import { useFocusManager } from "react-aria";
+import type { Placement } from "react-aria-components";
 import type { DialogProps as AriaDialogProps } from "react-aria-components";
 import { Button as AriaButton, Dialog as AriaDialog, DialogTrigger as AriaDialogTrigger, Popover as AriaPopover } from "react-aria-components";
 import { Avatar } from "@/components/base/avatar/avatar";
@@ -61,9 +61,9 @@ export const NavAccountMenu = ({ className, onLogout, ...dialogProps }: AriaDial
                     <div className="flex items-center justify-between px-3 py-2">
                         <div className="flex items-center gap-2 text-sm font-semibold text-secondary">
                             <Moon01 className="size-5 text-fg-quaternary" />
-                            Dark mode
+                            Donkere modus
                         </div>
-                        <Toggle size="sm" isSelected={isDark} onChange={(selected) => setTheme(selected ? "dark" : "light")} aria-label="Dark mode" />
+                        <Toggle size="sm" isSelected={isDark} onChange={(selected) => setTheme(selected ? "dark" : "light")} aria-label="Donkere modus" />
                     </div>
                 </div>
                 {onLogout ? (
@@ -76,8 +76,13 @@ export const NavAccountMenu = ({ className, onLogout, ...dialogProps }: AriaDial
                         </div>
                     </>
                 ) : (
-                    <div className="border-t border-secondary pt-0.5 pb-1.5">
-                        <NavAccountCardMenuItem label="Inloggen" icon={LogIn01} href="/login" />
+                    <div>
+                        <div className="border-t border-secondary pt-0.5 pb-1.5">
+                            <NavAccountCardMenuItem label="Inloggen" icon={LogIn01} href="/login" />
+                        </div>
+                        <div className="border-t border-secondary pt-0.5 pb-1.5">
+                            <NavAccountCardMenuItem label="Registreren" icon={LogIn01} href="/signup" />
+                        </div>
                     </div>
                 )}
             </div>
@@ -194,8 +199,11 @@ export const NavAccountCard = ({
             />
 
             <AriaDialogTrigger>
-                <AriaButton className="absolute top-2 right-2 flex cursor-pointer items-center justify-center rounded-md p-1.5 text-fg-quaternary outline-focus-ring transition duration-100 ease-linear hover:bg-primary_hover hover:text-fg-quaternary_hover focus-visible:outline-2 focus-visible:outline-offset-2 pressed:bg-primary_hover pressed:text-fg-quaternary_hover">
-                    <ChevronSelectorVertical className="size-4 shrink-0 stroke-[2.25px]" />
+                <AriaButton
+                    aria-label="Accountmenu openen"
+                    className="absolute top-2 right-2 flex cursor-pointer items-center justify-center rounded-md p-1.5 text-fg-quaternary outline-focus-ring transition duration-100 ease-linear hover:bg-primary_hover hover:text-fg-quaternary_hover focus-visible:outline-2 focus-visible:outline-offset-2 pressed:bg-primary_hover pressed:text-fg-quaternary_hover"
+                >
+                    <ChevronSelectorVertical aria-hidden="true" className="size-4 shrink-0 stroke-[2.25px]" />
                 </AriaButton>
                 <AriaPopover
                     placement={popoverPlacement ?? (isDesktop ? "right bottom" : "top right")}

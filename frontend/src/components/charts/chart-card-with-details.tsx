@@ -1,9 +1,12 @@
-import { useEffect, useState } from "react";
-import { Expand06, MessageChatSquare, XClose } from "@untitledui/icons";
+import { type RefObject, useEffect, useRef, useState } from "react";
+import { Edit05, Expand06, MessageChatSquare, XClose } from "@untitledui/icons";
 import { Dialog, DialogTrigger, Modal, ModalOverlay } from "@/components/application/modals/modal";
-import type { ChartSeries, ChartType, ValueFormat } from "@/components/charts/chart-card";
+import { Toggle } from "@/components/base/toggle/toggle";
+import type { ChartSeries, ChartType } from "@/components/charts/chart-card";
 import { ChartContent } from "@/components/charts/chart-card";
 import { ChartDownloadButton } from "@/components/charts/chart-download-button";
+import { ChartDataTable } from "@/components/charts/chart-data-table";
+import type { ValueFormat } from "@/components/charts/chart-format";
 import { ChartSkeleton } from "@/components/charts/chart-skeleton";
 import { HighlightCard, type HighlightCardData } from "@/components/charts/highlight-card";
 import { useAuth } from "@/features/auth";
@@ -54,7 +57,12 @@ export function ChartCardWithDetails({
     comment,
     onCommentChange,
 }: ChartCardWithDetailsProps) {
+    const chartRef = useRef<HTMLDivElement>(null);
+    const expandedChartRef = useRef<HTMLDivElement>(null);
     const [isExpanded, setIsExpanded] = useState(false);
+    // The figures beside the points, which the reader asks for rather than arrives at: off on
+    // every opening of the modal, however it was left the time before.
+    const [showPoints, setShowPoints] = useState(false);
     const { isAuthenticated } = useAuth();
     // Lets a note in het notities-overzicht link back to this exact card. Arriving on that link
     // opens the chart at full size, where the note is printed under it.
@@ -64,18 +72,38 @@ export function ChartCardWithDetails({
         if (shouldExpand && expandable) setIsExpanded(true);
     }, [shouldExpand, expandable]);
 
-    const chartContentProps = { data, series, chartType, xAxisKey, xAxisLabel, yAxisLabel, showLegend, valueFormat };
+    const chartContentProps = { title, data, series, chartType, xAxisKey, xAxisLabel, yAxisLabel, showLegend, valueFormat };
+    const table = <ChartDataTable title={title} data={data} series={series} xAxisKey={xAxisKey} xAxisLabel={xAxisLabel} valueFormat={valueFormat} />;
 
-    const downloadButton = !isLoading ? (
-        <ChartDownloadButton title={title} data={data} series={series} xAxisKey={xAxisKey} xAxisLabel={xAxisLabel} valueFormat={valueFormat} />
+    // What a comment button needs, or null where this chart has no note to write: a signed-in
+    // reader and a caller that both named the chart and asked to hear about the change.
+    const commentEditor = isAuthenticated && chartId && onCommentChange ? { chartId, onSaved: onCommentChange } : null;
+
+    const downloadButton = (imageRef: RefObject<HTMLDivElement | null>) => !isLoading ? (
+        <ChartDownloadButton imageRef={imageRef} title={title} data={data} series={series} xAxisKey={xAxisKey} xAxisLabel={xAxisLabel} valueFormat={valueFormat} />
     ) : null;
+
+    // Only the trend shapes have points to mark; a bar carries its figures on the bars
+    // themselves, so there is nothing there to turn on.
+    const pointsToggle =
+        chartType === "line" || chartType === "area" ? (
+            <Toggle
+                size="sm"
+                label="Waarden tonen"
+                aria-label="Waarden bij de punten tonen"
+                isSelected={showPoints}
+                onChange={setShowPoints}
+                className="mr-2 flex-row items-center gap-2"
+            />
+        ) : null;
 
     const expandButton =
         expandable && !isLoading ? (
             <button
                 type="button"
                 onClick={() => setIsExpanded(true)}
-                className="rounded-md p-1.5 text-fg-quaternary transition duration-100 ease-linear hover:bg-secondary_hover hover:text-fg-quaternary_hover"
+                aria-label={`${title} vergroten`}
+                className="rounded-md p-1.5 text-fg-tertiary outline-focus-ring transition duration-100 ease-linear hover:bg-secondary_hover focus-visible:outline-2 focus-visible:outline-offset-2"
             >
                 <Expand06 className="size-5" aria-hidden="true" />
             </button>
@@ -96,10 +124,8 @@ export function ChartCardWithDetails({
                 <div className="flex items-center justify-between px-5 pt-5 pb-1">
                     <h3 className="text-md font-semibold text-primary">{title}</h3>
                     <div className="flex items-center gap-1">
-                        {isAuthenticated && chartId && onCommentChange && !isLoading && (
-                            <ChartCommentButton chartId={chartId} comment={comment} onSaved={onCommentChange} />
-                        )}
-                        {isAuthenticated && downloadButton}
+                        {commentEditor && !isLoading && <ChartCommentButton {...commentEditor} comment={comment} />}
+                        {downloadButton(chartRef)}
                         {expandButton}
                     </div>
                 </div>
@@ -134,7 +160,8 @@ export function ChartCardWithDetails({
                                     </div>
                                 )}
 
-                                <ChartContent {...chartContentProps} />
+                                <div ref={chartRef}><ChartContent {...chartContentProps} /></div>
+                                {table}
                             </>
                         )}
                     </div>
@@ -142,19 +169,30 @@ export function ChartCardWithDetails({
             </div>
 
             {expandable && !isLoading && (
-                <DialogTrigger isOpen={isExpanded} onOpenChange={setIsExpanded}>
+                <DialogTrigger
+                    isOpen={isExpanded}
+                    onOpenChange={(open) => {
+                        setIsExpanded(open);
+                        if (!open) setShowPoints(false);
+                    }}
+                >
                     <ModalOverlay>
                         <Modal className="max-w-6xl">
-                            <Dialog className="flex-col">
+                            <Dialog aria-label={title} className="flex-col">
                                 <div className="w-full rounded-xl bg-primary p-6 shadow-lg">
                                     <div className="mb-4 flex items-center justify-between">
                                         <h3 className="text-lg font-semibold text-primary">{title}</h3>
                                         <div className="flex items-center gap-1">
-                                            {downloadButton}
+                                            {pointsToggle}
+                                            {/* A note that exists is edited by the pencil beside it, under the chart;
+                                                only the chart without one still needs a way in from up here. */}
+                                            {commentEditor && !comment?.text && <ChartCommentButton {...commentEditor} comment={comment} />}
+                                            {downloadButton(expandedChartRef)}
                                             <button
                                                 type="button"
                                                 onClick={() => setIsExpanded(false)}
-                                                className="rounded-md p-1.5 text-fg-quaternary transition duration-100 ease-linear hover:bg-secondary_hover hover:text-fg-quaternary_hover"
+                                                aria-label="Sluiten"
+                                                className="rounded-md p-1.5 text-fg-tertiary outline-focus-ring transition duration-100 ease-linear hover:bg-secondary_hover focus-visible:outline-2 focus-visible:outline-offset-2"
                                             >
                                                 <XClose className="size-5" aria-hidden="true" />
                                             </button>
@@ -187,16 +225,26 @@ export function ChartCardWithDetails({
                                                 </div>
                                             )}
 
-                                            <ChartContent {...chartContentProps} height={500} expanded />
+                                            <div ref={expandedChartRef}><ChartContent {...chartContentProps} height={500} showPoints={showPoints} /></div>
+                                            {table}
                                         </div>
                                     </div>
                                     {comment?.text && (
-                                        <div className="mt-4 flex gap-2 rounded-lg bg-secondary p-3">
+                                        <div className="mt-4 flex items-start gap-2 rounded-lg bg-secondary p-3">
                                             <MessageChatSquare className="mt-0.5 size-4 shrink-0 text-brand-secondary" aria-hidden="true" />
-                                            <div className="flex flex-col gap-1">
+                                            <div className="flex flex-1 flex-col gap-1">
                                                 <p className="text-sm whitespace-pre-wrap text-secondary">{comment.text}</p>
                                                 <p className="text-xs text-tertiary">Bijgewerkt op {formatCommentDate(comment.updated_at)}</p>
                                             </div>
+                                            {commentEditor && (
+                                                <ChartCommentButton
+                                                    {...commentEditor}
+                                                    comment={comment}
+                                                    icon={Edit05}
+                                                    label="Notitie bewerken"
+                                                    className="-my-1 shrink-0"
+                                                />
+                                            )}
                                         </div>
                                     )}
                                 </div>

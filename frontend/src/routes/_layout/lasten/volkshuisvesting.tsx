@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { LastenVolkshuisvestingRouteView } from "@/features/lasten";
+import { lastenUitleg, LastenVolkshuisvestingRouteView } from "@/features/lasten";
 
 export const Route = createFileRoute("/_layout/lasten/volkshuisvesting")({
     component: LastenVolkshuisvestingRouteView,
@@ -8,5 +8,6 @@ export const Route = createFileRoute("/_layout/lasten/volkshuisvesting")({
         description: "Volkshuisvesting, leefomgeving en stedelijke vernieuwing",
         showBreadCrumbs: true,
         crumbLabels: { lasten: "Lasten", volkshuisvesting: "Volkshuisvesting" },
+        subContent: lastenUitleg("8"),
     }),
 });
