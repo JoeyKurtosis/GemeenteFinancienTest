@@ -1,0 +1,12 @@
+node_modules/
+dist/
+dist-ssr/
+.vite/
+.tanstack/
+coverage/
+*.tsbuildinfo
+*.log
+.env
+.env.*
+.git/
+.DS_Store

@@ -17,10 +17,13 @@ DEBUG = os.getenv("DEBUG", "True").lower() in ("true", "1", "yes")
 DEVMODE = os.getenv("DEVMODE", "True").lower() in ("true", "1", "yes")
 
 ALLOWED_HOSTS = [
-    "gemeentefinancien.test.kurtosis.nl",
-    "localhost",
-    "127.0.0.1",
-] 
+    host.strip()
+    for host in os.getenv(
+        "ALLOWED_HOSTS",
+        "gemeentefinancien.test.kurtosis.nl,localhost,127.0.0.1",
+    ).split(",")
+    if host.strip()
+]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
